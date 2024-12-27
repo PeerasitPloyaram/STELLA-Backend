@@ -1,4 +1,4 @@
-from pymilvus import connections, Collection, utility
+from pymilvus import connections, Collection, utility, db
 from langchain_core.documents import Document
 from langchain_milvus import Milvus
 from schema import DATA_SOURCE_SCHEMA, INDEX_PARAMS
@@ -10,6 +10,7 @@ logger = logging.getLogger("milvus_logger")
 class Core:
     def __init__(self,
                 schema,
+                database_name:str,
                 dense_embedding_model, 
                 collection_name:str,
                 system_prune:bool=False,
@@ -27,6 +28,7 @@ class Core:
         verbose: bool = False -> Print the status of the database.
         """
         logger.info("[CORE] Initializing Milvus Database Core...")
+        self.database_name = database_name
         self.data_source_collection = collection_name
         self.data_source_schema = schema
 
@@ -49,10 +51,18 @@ class Core:
         """
 
         try:
-            connections.connect("default", host="localhost", port="19530")
+            connections.connect(host="localhost", port="19530")
         except Exception as e:
-            logger.eror(f"[DB] Connection Error: {e}")
+            logger.error(f"[DB] Connection Error: {e}")
             return
+        
+        if self.database_name in db.list_database():
+            logger.info(f'[DB] Found Database: {self.database_name}')
+            connections.connect(host="localhost", port="19530", db_name=self.database_name)
+        else:
+            logger.info(f'[DB] Create Database "{self.database_name}"')
+            db.create_database(self.database_name)
+            connections.connect(host="localhost", port="19530", db_name=self.database_name)
         
         if utility.has_collection(self.data_source_collection):
             logger.info(f'[DB] Found Collection "{self.data_source_collection}".')
@@ -63,14 +73,15 @@ class Core:
                 logger.info(f'[DB] Drop Collection "{self.data_source_collection}" Successfully.')
             else:
                 self.collection = Collection(name=self.data_source_collection)
-                return 
+                return
+        
+        logger.info(f'[DB] Create Collection "{self.data_source_collection}"')
         self.collection = Collection(
                                 name=self.data_source_collection,
                                 schema=self.data_source_schema,
                                 consistency_level="Strong"
                                 )
         self.collection.create_index("dense_vector", INDEX_PARAMS)
-        # self.collection.create_index()
         self.collection.flush()
 
         logger.info(f'[DB] Collection "{self.data_source_collection}" Is Ready.\n==========================================================================')
@@ -91,6 +102,9 @@ class Core:
             auto_id=True,
         )
         return self.vector_store
+    
+    def vectorStoreAddDocument(self, documents: list[Document]):
+        self.vector_store.add_documents(documents=documents)
 
 
     def thread_add_document(self ,embedding_model, documents: list[Document], batch_size=10):
@@ -137,8 +151,10 @@ if __name__ == "__main__":
     from langchain_huggingface import HuggingFaceEmbeddings
 
     core = Core(collection_name="data_source",
+                database_name="stella_db",
                 schema=DATA_SOURCE_SCHEMA,
                 dense_embedding_model=HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-large"),
                 system_prune=True
             )
+    print(db.list_database())
     print(utility.list_collections())
