@@ -94,7 +94,7 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
             a = start[0] + nav[index]["replace_start"] + "\n"
             nav_mapping = {key: nav[index][key] for key in ["search", "name_col"]}
             b = extract_table(file_name, nav_mapping)
-            print(nav_mapping)
+            # print(nav_mapping)
 
             if len(end) > 1:
                 c = nav[index]["replace_end"] + end[1] + "\n"
@@ -143,7 +143,7 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
                             focus = p.search(cut_start[pointer])
                             # print("  table", page_index + 1)
                             if focus:
-                                crop_page = p.within_bbox(bbox=(0, focus[0]["top"] + 100, 595, 842))
+                                crop_page = p.within_bbox(bbox=(0, focus[0]["top"] + 50, 595, 842))
                                 if crop_page.find_table():
                                     pages_nav.append(page_index + 1)
                             else:
@@ -519,15 +519,22 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
                 bu.append(an)
         return bu
 
-
-    navs = generateNav(file_name) # Generate Navigation for Extractor Extract Data
+    # Generate Navigations for Extractor Extract Data
+    navs = generateNav(file_name)
+    print("Navigations for Extract Data:")
     for i in navs:
-        print(i)
+        for j in i:
+            print(j)
 
-    section7 = extractorSec7(navs, section_data)    #7.2 - 7.4
+
+    # Extract Subsection 7.2 - 7.4
+    section7 = extractorSec7(navs, section_data)
     for i in range(0, len(section7)):
         section7[i] = section7[i].replace("รายชื่อกรรมการบริหารชุดปัจจุบัน", "คณะกรรมการบริหาร\nรายชื่อกรรมการบริหารชุดปัจจุบัน")
         section7[i] = section7[i].replace("คณะกรรมการชุดย่อยอื่นๆ\nข้อมูลคณะกรรมการชุดย่อย","คณะกรรมการชุดย่อยอื่นๆ\nข้อมูลคณะกรรมการชุดย่อย\n")
-    section7.append(section_data[3])           # 7.5
+
+    # Extract Subsection 7.5
+    for i in range(3, len(section_data)):
+        section7.append(section_data[i])
 
     return section7
