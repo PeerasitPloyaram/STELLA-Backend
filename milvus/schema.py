@@ -12,10 +12,19 @@ DATA_SOURCE_SCHEMA = CollectionSchema(
     enable_dynamic_field=True
 )
 
+# INDEX_PARAMS = {
+#     "index_type": "IVF_FLAT",
+#     "params": {
+#         "nlist": 128
+#     },
+#     "metric_type": "L2"
+# }
+
 INDEX_PARAMS = {
-    "index_type": "IVF_FLAT",
+    "index_type": "IVF_PQ",
     "params": {
-        "nlist": 128
+        "nlist": 128,
+        "m": 4
     },
     "metric_type": "L2"
 }

@@ -3,9 +3,9 @@ from langchain_core.documents import Document
 from langchain_milvus import Milvus
 from schema import DATA_SOURCE_SCHEMA, INDEX_PARAMS
 
-import logging
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]  %(message)s")
-logger = logging.getLogger("milvus_logger")
+# import logging
+# logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s]  %(message)s")
+# logger = logging.getLogger("milvus_logger")
 
 class Core:
     def __init__(self,
@@ -27,15 +27,18 @@ class Core:
         system_prune: bool = False -> Drop the collection if it exists.
         verbose: bool = False -> Print the status of the database.
         """
-        logger.info("[CORE] Initializing Milvus Database Core...")
+        # logger.info("[CORE] Initializing Milvus Database Core...")
+        print("[CORE] Initializing Milvus Database Core...")
         self.database_name = database_name
         self.data_source_collection = collection_name
         self.data_source_schema = schema
 
         # Embedding Model
-        logger.info("[DB] init Embedding Model...")
+        # logger.info("[DB] init Embedding Model...")
+        print("[DB] init Embedding Model...")
         self.dense_embedding_model = dense_embedding_model
-        logger.info("[DB] init Embedding Model Successfully.")
+        # logger.info("[DB] init Embedding Model Successfully.")
+        print("[DB] init Embedding Model Successfully.")
         self.sparse_embedding_model = ""
 
         self.initDataBase(system_prune=system_prune)
@@ -53,29 +56,40 @@ class Core:
         try:
             connections.connect(host="localhost", port="19530")
         except Exception as e:
-            logger.error(f"[DB] Connection Error: {e}")
+            # logger.error(f"[DB] Connection Error: {e}")
+            print(f"[DB] Connection Error: {e}")
             return
         
+        # list_db = db.list_database():
         if self.database_name in db.list_database():
-            logger.info(f'[DB] Found Database: {self.database_name}')
+            # logger.info(f'[DB] Found Database: {self.database_name}')
+            print("f'[DB] Found Database: {self.database_name}'")
             connections.connect(host="localhost", port="19530", db_name=self.database_name)
         else:
-            logger.info(f'[DB] Create Database "{self.database_name}"')
+            # logger.info(f'[DB] Create Database: {self.database_name}')
+            print(f'[DB] Create Database: {self.database_name}')
             db.create_database(self.database_name)
             connections.connect(host="localhost", port="19530", db_name=self.database_name)
         
         if utility.has_collection(self.data_source_collection):
-            logger.info(f'[DB] Found Collection "{self.data_source_collection}".')
+            # logger.info(f'[DB] Found Collection "{self.data_source_collection}".')
+            print(f'[DB] Found Collection "{self.data_source_collection}".')
             
             if system_prune:
-                logger.info(f'[DB] Drop Collection "{self.data_source_collection}"...')
-                utility.drop_collection(self.data_source_collection)
-                logger.info(f'[DB] Drop Collection "{self.data_source_collection}" Successfully.')
+                # logger.info(f'[DB] Drop Collection "{self.data_source_collection}"...')
+                print(f'[DB] Drop Collection "{self.data_source_collection}"...')
+                # utility.drop_collection(self.data_source_collection)
+                cl = Collection(name=self.data_source_collection)
+                print(f"{self.data_source_collection} has: {cl.num_entities} entities")
+                cl.drop()
+                # logger.info(f'[DB] Drop Collection "{self.data_source_collection}" Successfully.')
+                print(f'[DB] Drop Collection "{self.data_source_collection}" Successfully.')
             else:
                 self.collection = Collection(name=self.data_source_collection)
                 return
         
-        logger.info(f'[DB] Create Collection "{self.data_source_collection}"')
+        # logger.info(f'[DB] Create Collection "{self.data_source_collection}"')
+        print(f'[DB] Create Collection "{self.data_source_collection}"')
         self.collection = Collection(
                                 name=self.data_source_collection,
                                 schema=self.data_source_schema,
@@ -84,7 +98,11 @@ class Core:
         self.collection.create_index("dense_vector", INDEX_PARAMS)
         self.collection.flush()
 
-        logger.info(f'[DB] Collection "{self.data_source_collection}" Is Ready.\n==========================================================================')
+        # logger.info(f'[DB] Collection "{self.data_source_collection}" Is Ready.\n==========================================================================')
+        print(f'[DB] Collection "{self.data_source_collection}" Is Ready.\n==========================================================================')
+
+    def getNumEntities(self):
+        return self.collection.num_entities
 
     def initVectorStore(self, host:str="localhost", port:str="19530"):
         self.vector_store = Milvus(
@@ -92,8 +110,10 @@ class Core:
             collection_name=self.data_source_collection,
             connection_args={
                 "host": host,
-                "port": port
+                "port": port,
+                "db_name": self.database_name
             },
+            index_params=INDEX_PARAMS,
             primary_field="id",
             vector_field="dense_vector",
             text_field="text",
@@ -103,46 +123,18 @@ class Core:
         )
         return self.vector_store
     
-    def vectorStoreAddDocument(self, documents: list[Document]):
-        self.vector_store.add_documents(documents=documents)
-
-
-    def thread_add_document(self ,embedding_model, documents: list[Document], batch_size=10):
-        from concurrent.futures import ThreadPoolExecutor
-        """
-        """
-        def prepare_data(document):
-            vector = embedding_model.embed_query(document.page_content)
-            return {
-                "text": document.page_content,
-                "vector": vector,
-                "tester": "test"
+    def add_document(self, documents: list[Document]):
+        chunks = []
+        for doc in documents:
+            buffer = {
+                "dense_vector": self.dense_embedding_model.embed_query(doc.page_content),
+                "text": doc.page_content,
+                "metadata": doc.metadata
             }
-        
-        with ThreadPoolExecutor() as executor:
-            for i in range(0, len(documents), batch_size):
-                batch = documents[i:i+batch_size]
-                # Generate embeddings in parallel
-                prepared_data = list(executor.map(prepare_data, batch))
-                
-                # MilvusClient().insert(self.data_source_collection, prepared_data)
-                self.collection.insert(prepared_data)
-                print(f"Inserted batch of {len(prepared_data)} documents into Milvus collection.")
-                self.collection.flush()
-                # MilvusClient().flush([self.data_source_collection])
+            chunks.append(buffer)
 
-    def add_document(self, embedding_model, documents: list[Document]):
-        """
-        """
-        for document in documents:
-            vector = embedding_model.embed_query(document.page_content)
-            datas = {
-                "text": document.page_content,
-                "vector": vector,
-                "source": "test"
-            }
-
-            self.collection.insert(data=[datas])
+        self.collection.load()
+        print(self.collection.insert(data=chunks))
         self.collection.flush()
 
 
