@@ -1,39 +1,30 @@
-from pymilvus import connections, Collection, utility, db
+from pymilvus import connections, Collection, utility, db, MilvusClient
 from langchain_core.documents import Document
 from langchain_milvus import Milvus
 
 from schema import DATA_SOURCE_SCHEMA, INDEX_PARAMS
 
-# from pymilvus import WeightedRanker
-# from langchain_milvus.utils.sparse import BM25SparseEmbedding
-# from langchain_milvus.retrievers import MilvusCollectionHybridSearchRetriever
-# from schema import DATA_SOURCE_SCHEMA, DENSE_INDEX_PARAMS, SPARSE_INDEX_PARAMS
-
-
 class Core:
     def __init__(self,
                 schema,
                 database_name:str,
-                dense_embedding_model, 
-                collection_name:str,
-                system_prune:bool=False,
-                verbose:bool=False
+                dense_embedding_model,
+                token: str,
+                verbose:bool=False,
+                create_first_node: bool=True,
+                system_prune_first_node: bool=False
                 )-> None:
         """
         Mivus Database Core
         implements by Peerasit PLOYARAM
 
         args:
-        shcema: CollectionSchema -> The schema of the collection.
-        dense_embedding_model: HuggingFaceEmbeddings -> The embedding model for dense vector.
-        collection_name: str -> The name of the collection.
-        system_prune: bool = False -> Drop the collection if it exists.
-        verbose: bool = False -> Print the status of the database.
         """
 
         print("[CORE] Initializing Milvus Database Core...")
         self.database_name = database_name
-        self.data_source_collection = collection_name
+        self.token = token
+        self.collection_pointer = None
         self.data_source_schema = schema
 
         # Embedding Model
@@ -41,10 +32,12 @@ class Core:
         self.dense_embedding_model = dense_embedding_model
         print("[DB] init Embedding Model Successfully.")
 
-        self.initDataBase(system_prune=system_prune)
+        self.initDataBase()
+        if create_first_node:
+            self.createCollection("cnode_1", system_prune=system_prune_first_node)
         
     
-    def initDataBase(self, system_prune: bool = False):
+    def initDataBase(self):
         """
         Initialize the Milvus Database
 
@@ -54,7 +47,7 @@ class Core:
         """
 
         try:
-            connections.connect(host="localhost", port="19530")
+            connections.connect(host="localhost", port="19530", token=self.token)
         except Exception as e:
             print(f"[DB] Connection Error: {e}")
             return
@@ -62,77 +55,167 @@ class Core:
         # list_db = db.list_database():
         if self.database_name in db.list_database():
             print(f'[DB] Found Database: {self.database_name}')
-            connections.connect(host="localhost", port="19530", db_name=self.database_name)
+            connections.connect(host="localhost", port="19530", db_name=self.database_name, token=self.token)
         else:
             print(f'[DB] Create Database: {self.database_name}')
             db.create_database(self.database_name)
-            connections.connect(host="localhost", port="19530", db_name=self.database_name)
-        
-        if utility.has_collection(self.data_source_collection):
-            print(f'[DB] Found Collection "{self.data_source_collection}".')
+            connections.connect(host="localhost", port="19530", db_name=self.database_name, token=self.token)
+
+    def createCollection(self, collection_name: str,system_prune: bool = False):
+        if utility.has_collection(collection_name=collection_name):
+            print(f'[DB] Found Collection "{collection_name}".')
             
             if system_prune:
-                print(f'[DB] Drop Collection "{self.data_source_collection}"...')
-                # utility.drop_collection(self.data_source_collection)
-                cl = Collection(name=self.data_source_collection)
-                print(f"{self.data_source_collection} has: {cl.num_entities} entities")
+                print(f'[DB] Drop Collection "{collection_name}"...')
+                cl = Collection(name=collection_name)
+                print(f"{collection_name} has: {cl.num_entities} entities")
                 cl.drop()
-                print(f'[DB] Drop Collection "{self.data_source_collection}" Successfully.')
+                print(f'[DB] Drop Collection "{collection_name}" Successfully.')
+
             else:
-                self.collection = Collection(name=self.data_source_collection)
+                print(f'[DB] GET Collection Successfully.')
+                self.collection = Collection(name=collection_name)
                 return
         
-        print(f'[DB] Create Collection "{self.data_source_collection}"')
-        self.collection = Collection(
-                                name=self.data_source_collection,
+        print(f'[DB] Create Collection "{collection_name}"')
+        collection = Collection(name=collection_name,
                                 schema=self.data_source_schema,
                                 consistency_level="Strong",
-                                num_shards=4
+                                num_shards=4,
                                 )
-        self.collection.create_index("dense_vector", INDEX_PARAMS)
+        collection.create_index("dense_vector", INDEX_PARAMS)
         # self.collection.create_index("sparse_vector", SPARSE_INDEX_PARAMS)
-        self.collection.flush()
+        collection.flush()
+        print(f'[DB] Collection "{collection_name}" Is Ready.')
+        return collection
 
-        print(f'[DB] Collection "{self.data_source_collection}" Is Ready.\n======================================================================')
+    def dropCollection(self, collection_name: str):
+        utility.drop_collection(collection_name)
+    
+    # Set Pointer to Collection
+    def setCollectionPointer(self, collection_name):
+        if type(collection_name) == Collection:
+            # print("From Collection")
+            self.collection_pointer = collection_name
+        else:
+            # print("From String")
+            self.collection_pointer = Collection(name=collection_name)
+
+    def getCollectionPointer(self) -> Collection:
+        return self.collection_pointer
+    
+    def listCollection(self):
+        return utility.list_collections()
+
+
+    def listPartition(self, collection_name):
+        return MilvusClient(db_name=self.database_name, token=self.token).list_partitions(collection_name)
+    def findPartition(self, collection:Collection, partitinon_name:str):
+        return collection.has_partition(partitinon_name)
+
+    # def createPartition(self,collection: Collection, partition_name, description=""):
+    #     if not collection.has_partition(partition_name):
+    #         print("[DB] Create New Partition")
+    #         cl = collection.create_partition(partition_name=partition_name,
+    #                                             description=description)
+    #         # cl.flush()
+
+    # def drop(self, collection: Collection, partition_name: str):
+    #     collection.drop_partition(partition_name)
+
 
     def getNumEntities(self):
-        return self.collection.num_entities
+        return self.collection_pointer.num_entities
     
     def describe(self):
-        return self.collection.describe()
+        return self.collection_pointer.describe()
 
-    def initVectorStore(self, host:str="localhost", port:str="19530"):
-        self.vector_store = Milvus(
-            embedding_function=self.dense_embedding_model,
-            collection_name=self.data_source_collection,
-            connection_args={
-                "host": host,
-                "port": port,
-                "db_name": self.database_name
-            },
-            index_params=INDEX_PARAMS,
-            primary_field="id",
-            vector_field="dense_vector",
-            text_field="text",
-            metadata_field="metadata",
-            enable_dynamic_field=False,
-            auto_id=True,
+
+    # def initVectorStore(self, collection_name, partition_names:list, host:str="localhost", port:str="19530"):
+    def initVectorStore(self, collection_name, partition_names:list, search_kwargs):
+        client = Milvus(
+        embedding_function=self.dense_embedding_model,
+        partition_names=partition_names,
+        collection_name=collection_name,
+        connection_args={
+            "host": "localhost",
+            "port": 19530,
+            "user": "root",
+            "password": "Milvus",
+            "db_name": self.database_name
+        },
+        index_params=INDEX_PARAMS,
+        primary_field="id",
+        vector_field="dense_vector",
+        text_field="text",
+        metadata_field="metadata",
+        enable_dynamic_field=False,
+        auto_id=True,
         )
-        return self.vector_store
-    
-    # def hybridRetreiver(self):
-    #     re = MilvusCollectionHybridSearchRetriever(
-    #         collection=self.collection,
-    #         rerank=WeightedRanker(0.3, 0.7),
-    #         anns_fields=["dense_vector", "sparse_vector"],
-    #         field_embeddings=[self.dense_embedding_model, BM25SparseEmbedding(corpus=[""])],
-    #         field_search_params=[DENSE_INDEX_PARAMS, SPARSE_INDEX_PARAMS],
-    #         top_k=4,
-    #         text_field="text",
-    #     )
-    #     return re
-    
-    def add_document(self, documents: list[Document]):
+
+        # {
+        #     "k": 8,
+        #     "partition_names": ["bts", "scb"],
+        #     "expr": '(metadata["year"] == "2023" && metadata["company_name"] == "SCB") || (metadata["year"] == "2023" && metadata["company_name"] == "BTS")'
+        # }
+        client._load(partition_names=partition_names)
+
+        retreiver = client.as_retriever(search_kwargs=search_kwargs)
+        return retreiver
+
+
+    # Find Collection Node
+    def findCollectionNode(self):
+        client = MilvusClient(db_name=self.database_name, token=self.token)
+        collections = client.list_collections()
+        cnode_items = [item for item in collections if item.startswith("cnode_")]
+        cnode_items.sort()
+        if cnode_items == []:
+            return []
+        return cnode_items
+
+
+    # Create Collection Node
+    def createCnodeCollection(self)-> str:
+        current_node = self.findCollectionNode()
+        current_node = current_node[-1]
+
+        try:
+            if current_node == []:
+                collection_name = f"cnode_{1}"
+            else:
+                if isinstance(id := int(current_node.split("_")[1]), int):
+                    collection_name = f"cnode_{id + 1}"
+                    print("Create", collection_name)
+
+            collection = Collection(name=collection_name,
+                                    schema=self.data_source_schema,
+                                    consistency_level="Strong",
+                                    num_shards=4,
+                                    )
+            collection.create_index("dense_vector", INDEX_PARAMS)
+            # self.collection.create_index("sparse_vector", SPARSE_INDEX_PARAMS)
+            collection.flush()
+            print(f'[DB] Collection "{collection_name}" Is Ready.')
+            return collection_name
+        except:
+            pass
+
+
+    # Isolate
+    def add_document(self, name: str, documents: list[Document]):
+        limit_size = 2
+
+        cnodes = self.findCollectionNode()
+        found_at = ""
+        found = False
+
+        for cnode in cnodes:
+            if self.findPartition(Collection(name=cnode), name):
+                found = True
+                found_at = cnode
+                break
+
         chunks = []
         for doc in documents:
             buffer = {
@@ -142,21 +225,61 @@ class Core:
                 "metadata": doc.metadata
             }
             chunks.append(buffer)
+        
+        if found:
+            self.setCollectionPointer(found_at)
+            current_node = self.getCollectionPointer()
 
-        self.collection.load()
-        print(self.collection.insert(data=chunks))
-        self.collection.flush()
+            print("[DB Found Partition")
+            s = current_node.partition(name)
+            print(f"[DB] Partition {name}: {s.num_entities} entities")
+            s.load()
+            s.insert(data=chunks)
+            s.flush()
+            print(f"[DB] Partition {name}: {s.num_entities} entities")
+        else:
+            flag = False
+            for cnode in cnodes:
+                if len(self.listPartition(cnode)) - 1 < limit_size:
+                    flag = False
+                    self.setCollectionPointer(cnode)
+                    break
+                else:
+                    flag = True
+            if flag:
+                new_node = self.createCnodeCollection()
+                self.setCollectionPointer(new_node)
+
+            current_node = self.getCollectionPointer()
+            current_node.create_partition(partition_name=name, description="")
+            print("[DB] Create New Partition")
+            partition = current_node.partition(name)
+            partition.load()
+            partition.insert(data=chunks)
+            partition.flush()
+            print(f"[DB] Partition {name}: {partition.num_entities} entities")
 
 
 
 if __name__ == "__main__":
+    import os
+    from dotenv import load_dotenv
     from langchain_huggingface import HuggingFaceEmbeddings
 
-    core = Core(collection_name="data_source",
-                database_name="stella_db",
+    load_dotenv()
+    core = Core(
+                database_name="new_core",
                 schema=DATA_SOURCE_SCHEMA,
-                dense_embedding_model=HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-large"),
-                system_prune=True
+                dense_embedding_model=HuggingFaceEmbeddings(model_name=os.getenv("DENSE_EMBEDDING_MODEL")),
+                create_first_node=True,
+                token=os.getenv('TOKEN'),
+                system_prune_first_node=True
             )
-    print(db.list_database())
-    print(utility.list_collections())
+
+    print("====")
+    for collection in core.listCollection():
+        print(f"Collection {collection}:")
+        for p in core.listPartition(collection):
+            c = Collection(name=collection).partition(p).num_entities
+            print("Partition in", collection, ":", p, "has", c, "entities")
+    print("===")

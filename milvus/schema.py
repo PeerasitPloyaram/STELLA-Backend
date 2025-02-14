@@ -5,6 +5,7 @@ vector_field = FieldSchema(name="dense_vector", dtype=DataType.FLOAT_VECTOR, dim
 # sparse_field = FieldSchema(name="sparse_vector", dtype=DataType.SPARSE_FLOAT_VECTOR)
 text_field = FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=8192)  # Page Content
 metadata_field = FieldSchema(name="metadata", dtype=DataType.JSON)  # Additional metadata
+# partition_key_field = FieldSchema(name="partition_key", dtype=DataType.VARCHAR, max_length=128, is_partition_key=True)
 
 schema_fields = [id_field, vector_field, text_field, metadata_field]
 DATA_SOURCE_SCHEMA = CollectionSchema(
@@ -27,7 +28,7 @@ INDEX_PARAMS = {
         "nlist": 128,
         "m": 4
     },
-    "metric_type": "L2"
+    "metric_type": "IP"
 }
 
 # DENSE_INDEX_PARAMS = {
