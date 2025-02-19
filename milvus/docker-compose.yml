@@ -65,6 +65,7 @@ services:
       - "minio"
 
   mariadb:
+    container_name: mariadb
     image: mariadb:10
     hostname: mariadb
     volumes:

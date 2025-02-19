@@ -1,8 +1,15 @@
 from pymilvus import connections, Collection, utility, db, MilvusClient
 from langchain_core.documents import Document
 from langchain_milvus import Milvus
+# from pymilvus import WeightedRanker
+# from pymilvus.model.sparse.bm25.tokenizers import build_default_analyzer
+# from pymilvus.model.sparse import BM25EmbeddingFunction
 
-from schema import DATA_SOURCE_SCHEMA, INDEX_PARAMS
+from schema import DATA_SOURCE_SCHEMA, FRONTEND_QUERY_SOURCE_SCHEMA, INDEX_PARAMS, FRONTEND_QUERY_PARAMS
+
+import sys
+sys.path.insert(0, '/Users/peerasit/senior_project/STELLA-Backend')
+from db.service import insertCompanyData, insertGeneralData
 
 class Core:
     def __init__(self,
@@ -35,6 +42,8 @@ class Core:
         self.initDataBase()
         if create_first_node:
             self.createCollection("cnode_1", system_prune=system_prune_first_node)
+            self.createCollection("gnode_1", system_prune=system_prune_first_node)
+            self.createFrontEndQueryCollection(system_prune=system_prune_first_node)
         
     
     def initDataBase(self):
@@ -164,8 +173,17 @@ class Core:
         return retreiver
 
 
+    def findCollectionGNode(self):
+        client = MilvusClient(db_name=self.database_name, token=self.token)
+        collections = client.list_collections()
+        cnode_items = [item for item in collections if item.startswith("gnode_")]
+        cnode_items.sort()
+        if cnode_items == []:
+            return []
+        return cnode_items
+
     # Find Collection Node
-    def findCollectionNode(self):
+    def findCollectionCNode(self):
         client = MilvusClient(db_name=self.database_name, token=self.token)
         collections = client.list_collections()
         cnode_items = [item for item in collections if item.startswith("cnode_")]
@@ -177,7 +195,7 @@ class Core:
 
     # Create Collection Node
     def createCnodeCollection(self)-> str:
-        current_node = self.findCollectionNode()
+        current_node = self.findCollectionCNode()
         current_node = current_node[-1]
 
         try:
@@ -201,19 +219,167 @@ class Core:
         except:
             pass
 
+    def createGnodeCollection(self)-> str:
+        current_node = self.findCollectionGNode()
+        current_node = current_node[-1]
+
+        try:
+            if current_node == []:
+                collection_name = f"gnode_{1}"
+            else:
+                if isinstance(id := int(current_node.split("_")[1]), int):
+                    collection_name = f"gnode_{id + 1}"
+                    print("Create", collection_name)
+
+            collection = Collection(name=collection_name,
+                                    schema=self.data_source_schema,
+                                    consistency_level="Strong",
+                                    num_shards=4,
+                                    )
+            collection.create_index("dense_vector", INDEX_PARAMS)
+            # self.collection.create_index("sparse_vector", SPARSE_INDEX_PARAMS)
+            collection.flush()
+            print(f'[DB] Collection "{collection_name}" Is Ready.')
+            return collection_name
+        except:
+            pass
+
+
+    def createFrontEndQueryCollection(self, system_prune: bool = False):
+        collection_name = "frontend_query_general_documents"
+        if utility.has_collection(collection_name=collection_name):
+            print(f'[DB] Found Collection "{collection_name}".')
+            
+            if system_prune:
+                print(f'[DB] Drop Collection "{collection_name}"...')
+                cl = Collection(name=collection_name)
+                print(f"{collection_name} has: {cl.num_entities} entities")
+                cl.drop()
+                print(f'[DB] Drop Collection "{collection_name}" Successfully.')
+
+            else:
+                print(f'[DB] GET Collection Successfully.')
+                self.collection = Collection(name=collection_name)
+                return
+            
+        print(f'[DB] Create Collection "{collection_name}"')
+        collection = Collection(name=collection_name,
+                                schema=FRONTEND_QUERY_SOURCE_SCHEMA,
+                                consistency_level="Strong",
+                                num_shards=4,
+                                )
+        collection.create_index("dense_vector", FRONTEND_QUERY_PARAMS)
+        collection.flush()
+        print(f'[DB] Collection "{collection_name}" Is Ready.')
+        return collection
+
+
+    def addFrontEndQueryData(self, front_end_query: list[dict[str:str]]):
+        """Add name partition and description for simirality search frontend query general datas.
+        Format {"name": "name_of_partition", description: "description of general file"}
+        """
+
+        documents = front_end_query
+        entities = []
+        for doc in documents:
+            entities.append({
+                "name": doc["name"],
+                "description": doc["description"],
+                "dense_vector": self.dense_embedding_model.embed_query(doc["description"]),
+                # "sparse_vector": sparse_vector
+            })
+
+        cl = Collection(name="frontend_query_general_documents")
+        cl.insert(entities)
+        cl.flush()
+        print("[DB] Insert Query FrontEnd Successfuly.")
+
+
+
+    def search_general_documents(self, query:str, top_k:int=3, ratio:float=0.785):
+        """Search the most relevant general documents for a given query."""
+
+        cl = Collection(name="frontend_query_general_documents")
+        cl.load()
+        
+        query_embedding = self.dense_embedding_model.embed_query(query)
+        results = cl.search(
+            data=[query_embedding],
+            anns_field="dense_vector",
+            param=FRONTEND_QUERY_PARAMS,
+            limit=top_k,
+            output_fields=["name", "description"]
+        )
+
+        partition_loc = []
+        for entities in results:
+            for entity in entities:
+                print(entity)
+                if float(entity.distance) >= ratio:
+                    partition_loc.append(entity.get("name"))
+        return partition_loc
+
+    # def search_general_documents_hybrid(self, input):
+    #     from pymilvus import WeightedRanker
+
+    #     rerank= WeightedRanker(0.3, 0.8) 
+    #     # from pymilvus import RRFRanker
+
+    #     # rerank = RRFRanker(100)
+    #     from pymilvus import AnnSearchRequest
+    #     search_param_1 = {
+    #         "data": [self.dense_embedding_model.embed_query(input)],
+    #         "anns_field": "dense_vector",
+    #         "param": {
+    #             "metric_type": "IP",
+    #             "params": {"nprobe": 10}
+    #         },
+    #         "limit": 2
+    #     }
+    #     request_1 = AnnSearchRequest(**search_param_1)
+
+    #     b = BM25EmbeddingFunction()
+    #     search_param_2 = {
+    #         "data": b.encode_documents([input]),
+    #         "anns_field": "sparse_vector",
+    #         "param": {
+    #             "metric_type": "IP",
+    #             "params": {}
+    #         },
+    #         "limit": 2
+    #     }
+    #     request_2 = AnnSearchRequest(**search_param_2)
+
+
+    #     reqs = [request_1, request_2]
+    #     client = MilvusClient(db_name=self.database_name, token=self.token)
+    #     client.load_collection("frontend_query_general_documents")
+    #     res = client.hybrid_search(
+    #         collection_name="frontend_query_general_documents",
+    #         reqs=reqs,
+    #         ranker=rerank
+    #     )
+    #     for hits in res:
+    #         print("TopK results:")
+    #         for hit in hits:
+    #             print(hit)
+
 
     # Isolate
-    def add_document(self, name: str, documents: list[Document]):
+    def add_document(self, name: str, documents: list[Document], node_type:str, description:str | None=None, sector_id: int | None=None):
         limit_size = 2
 
-        cnodes = self.findCollectionNode()
+        if node_type == "c":
+            nodes = self.findCollectionCNode()
+        else:
+            nodes = self.findCollectionGNode()
         found_at = ""
-        found = False
+        found_partition = False
 
-        for cnode in cnodes:
-            if self.findPartition(Collection(name=cnode), name):
-                found = True
-                found_at = cnode
+        for node in nodes:
+            if self.findPartition(Collection(name=node), name):
+                found_partition = True
+                found_at = node
                 break
 
         chunks = []
@@ -226,7 +392,7 @@ class Core:
             }
             chunks.append(buffer)
         
-        if found:
+        if found_partition:
             self.setCollectionPointer(found_at)
             current_node = self.getCollectionPointer()
 
@@ -239,19 +405,39 @@ class Core:
             print(f"[DB] Partition {name}: {s.num_entities} entities")
         else:
             flag = False
-            for cnode in cnodes:
-                if len(self.listPartition(cnode)) - 1 < limit_size:
+            for node in nodes:
+                if len(self.listPartition(node)) - 1 < limit_size:
                     flag = False
-                    self.setCollectionPointer(cnode)
+                    self.setCollectionPointer(node)
                     break
                 else:
                     flag = True
             if flag:
-                new_node = self.createCnodeCollection()
+                if node_type == "c":
+                    new_node = self.createCnodeCollection()
+                else:
+                    new_node = self.createGnodeCollection()
+
                 self.setCollectionPointer(new_node)
 
             current_node = self.getCollectionPointer()
+            print(current_node)
+            print(type(current_node))
             current_node.create_partition(partition_name=name, description="")
+
+            if node_type == "c":
+                if sector_id == None:
+                    print("[DB] ERROR: You Must Pass Sector")
+                    return "You must pass sector"
+                insertCompanyData(sector_id=sector_id, abbr=name, collection_name=current_node.name, partition_name=name)
+            else:
+                if description != None:
+                    frontend_context = [{"name": name, "description": description}]
+                else:
+                    return "You must pass description if node type g"
+                insertGeneralData(document_name=name, collection_name=current_node.name, partition_name=name)
+                self.addFrontEndQueryData(front_end_query=frontend_context)
+
             print("[DB] Create New Partition")
             partition = current_node.partition(name)
             partition.load()
@@ -272,10 +458,9 @@ if __name__ == "__main__":
                 schema=DATA_SOURCE_SCHEMA,
                 dense_embedding_model=HuggingFaceEmbeddings(model_name=os.getenv("DENSE_EMBEDDING_MODEL")),
                 create_first_node=True,
+                system_prune_first_node=True,
                 token=os.getenv('TOKEN'),
-                system_prune_first_node=True
             )
-
     print("====")
     for collection in core.listCollection():
         print(f"Collection {collection}:")
