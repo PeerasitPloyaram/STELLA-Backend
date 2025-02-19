@@ -179,7 +179,9 @@ def createDocuments(file_path: str, text):
 
     documents = []
 
+    # print(file_name)
     metadata = {
+        "file_name": file_name,
         "company_name": company_name,
         "file_type": file_type,
         "year": year,

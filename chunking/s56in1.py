@@ -36,11 +36,9 @@ def extract_table(file_name: str, config: dict[str, any]) -> str:
 
     with pdfplumber.open(file_name) as pdf:
         buffers = ""
-        # print(config[list(config.keys())[0]].items())
         for s, page in config[list(config.keys())[0]].items():
             name_col = config["name_col"]
 
-            # print(page[0])
             p = pdf.pages[page[0] - 1]
             focus = p.search(s)
             # print(s, "In Page:", page[0] - 1)
@@ -63,12 +61,6 @@ def extract_table(file_name: str, config: dict[str, any]) -> str:
                 p = p.within_bbox(bbox=(0, 0, 595, 842))
                 tables = p.extract_tables()
                 buffers += compute(tables, name_col)
-
-            # OLD Version
-            # p = p.within_bbox(bbox=(0, focus[0]["top"], 595, 842))
-            # tables = p.extract_tables()
-            # print(tables)
-            # buffers += compute(tables, name_col)
 
             for i in page[1:]:
                 # print("MOVE EXTRACT Page:", i - 1)
@@ -110,15 +102,12 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
             with pdfplumber.open(file_name) as pdf:        
                 enable = True
                 finals_pages = []
-                # found_end = False
-                # found_start = False
                 for pointer in range(0, len(cut_start)):
                     pages_nav = []
                     for page_index in range(0, len(pdf.pages)):
                         if pdf.pages[page_index].search(cut_start[pointer]) and enable:
                             # print("start page",page_index + 1, cut_start[pointer])
                             enable = False
-                            # found_start = True
 
                             if pdf.pages[page_index].search(cut_end[pointer]):
                                 # print("  end page in start", page_index + 1, cut_end[pointer])
@@ -128,7 +117,6 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
 
                         if pdf.pages[page_index].search(cut_end[pointer]):
                             # print("  end page", page_index + 1, cut_end[pointer])
-                            # found_end = True
                             enable = True
                             p = pdf.pages[page_index]
                             focus = p.search(cut_end[pointer])                              # Search Tail Cut
@@ -148,11 +136,6 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
                                     pages_nav.append(page_index + 1)
                             else:
                                 pages_nav.append(page_index + 1)
-
-                    # Check REGEX
-                    # if not found_end or not found_start:
-                    #     pages_nav = []
-                    # # 
                     sol = {
                         "pages": pages_nav,
                         "start": cut_start[pointer],
@@ -173,7 +156,6 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
             ]
 
             with pdfplumber.open(file_name) as pdf:
-            # enable = True
                 found = False
                 finals_pages = []
                 for i in range(0, len(commitee_list)):
@@ -358,8 +340,6 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
             elif i["start"] == "รายชื่อกรรมการบริหารที่ลาออก/พ้นตำแหน่งระหว่างปี":
                 buffer.append(createNav([i["start"]], [i["end"]], ["ข้อมูลทั่วไป", "ตำแหน่งของกรรมการ","ระยะเวลาดำรงตำแหน่ง", "กรรมการที่มาดำรงตำแหน่งแทน"])[0])
         
-        # for i in buffer:
-            # print(i)
         navs.append(buffer)
 
 
@@ -367,7 +347,6 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
         cut_start = ["คณะกรรมการชุดย่อยอื่นๆ\nข้อมูลคณะกรรมการชุดย่อย"]
         cut_end = ["บทบาทหน้าที่ของคณะกรรมการชุดย่อย"]
         d = createNav(cut_start, cut_end, col)
-        # print("dddddd", d)
         navs.append(d)
 
 
@@ -521,10 +500,11 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
 
     # Generate Navigations for Extractor Extract Data
     navs = generateNav(file_name)
-    print("Navigations for Extract Data:")
-    for i in navs:
-        for j in i:
-            print(j)
+    if verbose:
+        print("Navigations for Extract Data:")
+        for i in navs:
+            for j in i:
+                print(j)
 
 
     # Extract Subsection 7.2 - 7.4
