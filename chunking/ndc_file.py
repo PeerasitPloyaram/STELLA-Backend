@@ -1,9 +1,10 @@
 import pdfplumber
 from langchain_core.documents import Document
 import re
+from io import BytesIO
 
-def extract_tables(file_name:str, start: str, end: str)-> str:
-    with pdfplumber.open(file_name) as pdf:
+def extract_tables(file_path:str, start: str, end: str)-> str:
+    with pdfplumber.open(file_path) as pdf:
         page_size = len(pdf.pages)
 
         pages = []
@@ -30,17 +31,23 @@ def extract_tables(file_name:str, start: str, end: str)-> str:
         pdf.close()
         return buffer
 
-def ndcFileChunking(file_name)-> list[Document]:
+def ndcFileChunking(content:BytesIO | str, file_name:str)-> list[Document]:
     """
     Extract all text data and table in Nationally Determined Contribution: NDC file and chunking into chunk and create documents.
 
     with use hybrid chunking (Structure Chunking and Sematic Chunking)
+    
     """
+    
+    if (type(content) is BytesIO) or (type(content) is str):
+        pass
+    else:
+        return
 
     metadata_file_name = file_name.split("/")[-1]
     context = ""
 
-    with pdfplumber.open(file_name) as pdf:
+    with pdfplumber.open(content) as pdf:
         page_size = len(pdf.pages)
         for index in range(1, page_size):
             p = pdf.pages[index].within_bbox(bbox=(0, 0, 595, 790))
@@ -48,7 +55,7 @@ def ndcFileChunking(file_name)-> list[Document]:
 
         start = "Accompanying information"
         end = "Consideration of fairness and ambition, in light of national circumstances and\ncontribution to the ultimate objective of the Convention \\(Article 2\\)"
-        table = extract_tables(file_name, start, end)
+        table = extract_tables(content, start, end)
 
         spliter_s =  context.split(end.replace("\\",""))
         end_postfix = end.replace("\\","")
@@ -86,4 +93,4 @@ def ndcFileChunking(file_name)-> list[Document]:
 
 
 if __name__ == "__main__":
-    result = ndcFileChunking("/Users/peerasit/senior_project/STELLA-Backend/chunking/pdfs/Thailand_INDCs_2015.pdf")
+    result = ndcFileChunking("/Users/peerasit/senior_project/STELLA-Backend/chunking/pdfs/general/Thailand_INDCs_2015.pdf", "/Users/peerasit/senior_project/STELLA-Backend/chunking/pdfs/general/Thailand_INDCs_2015.pdf")

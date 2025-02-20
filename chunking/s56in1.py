@@ -1,7 +1,8 @@
 import pdfplumber
 import pandas as pd
+from io import BytesIO
 
-def extract_table(file_name: str, config: dict[str, any]) -> str:
+def extract_table(content:BytesIO | str, config: dict[str, any]) -> str:
     """
     file_name: name,
     config:
@@ -34,7 +35,7 @@ def extract_table(file_name: str, config: dict[str, any]) -> str:
         
         return buffer
 
-    with pdfplumber.open(file_name) as pdf:
+    with pdfplumber.open(content) as pdf:
         buffers = ""
         for s, page in config[list(config.keys())[0]].items():
             name_col = config["name_col"]
@@ -73,7 +74,7 @@ def extract_table(file_name: str, config: dict[str, any]) -> str:
 
 
 
-def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> list:
+def extractor56Section7V1(content:BytesIO | str, section_data: dict, verbose=False) -> list:
     
     def compute_struct(nav: list[dict[str, any]], input) -> str:
         final = input
@@ -85,8 +86,7 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
                 end = start[0].split(nav[index]["replace_end"])
             a = start[0] + nav[index]["replace_start"] + "\n"
             nav_mapping = {key: nav[index][key] for key in ["search", "name_col"]}
-            b = extract_table(file_name, nav_mapping)
-            # print(nav_mapping)
+            b = extract_table(content=content, config=nav_mapping)
 
             if len(end) > 1:
                 c = nav[index]["replace_end"] + end[1] + "\n"
@@ -96,10 +96,10 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
         return final
 
 
-    def generateNav(file_name:str):
+    def generateNav(content:BytesIO | str):
         navs = []
         def compute_nav(cut_start, cut_end):
-            with pdfplumber.open(file_name) as pdf:        
+            with pdfplumber.open(content) as pdf:        
                 enable = True
                 finals_pages = []
                 for pointer in range(0, len(cut_start)):
@@ -155,7 +155,7 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
                 "คณะกรรมการชุดย่อยอื่นๆ"
             ]
 
-            with pdfplumber.open(file_name) as pdf:
+            with pdfplumber.open(content) as pdf:
                 found = False
                 finals_pages = []
                 for i in range(0, len(commitee_list)):
@@ -220,7 +220,7 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
                 "ข้อมูลเกี่ยวกับคณะกรรมการอื่นๆ"
             ]
 
-            with pdfplumber.open(file_name) as pdf:
+            with pdfplumber.open(content) as pdf:
                 found = False
                 finals_pages = []
                 for i in range(0, len(commitee_list)):
@@ -418,10 +418,10 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
     #                 buffers += "-----\n"
     #     return buffers
 
-    def extract_etc_commiteev2(file_name, page_num):
+    def extract_etc_commiteev2(content:BytesIO | str, page_num):
         buffers = ""
         for p in page_num:
-            with pdfplumber.open(file_name) as pdf:
+            with pdfplumber.open(content) as pdf:
                 page = pdf.pages[p - 1]
                 # print(page.find_table())
                 table = page.extract_table(table_settings={
@@ -473,7 +473,7 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
                 # print(page)
                 a = "คณะกรรมการชุดย่อยอื่นๆ\nข้อมูลคณะกรรมการชุดย่อย"
                 # b = extract_etc_commitee(file_name, page[0])
-                b = extract_etc_commiteev2(file_name, page)
+                b = extract_etc_commiteev2(content, page)
 
                 replace_start = "ข้อมูลคณะกรรมการชุดย่อย"
                 replace_end = "บทบาทหน้าที่ของคณะกรรมการชุดย่อย"
@@ -499,7 +499,7 @@ def extractor56Section7V1(file_name: str, section_data: dict, verbose=False) -> 
         return bu
 
     # Generate Navigations for Extractor Extract Data
-    navs = generateNav(file_name)
+    navs = generateNav(content)
     if verbose:
         print("Navigations for Extract Data:")
         for i in navs:

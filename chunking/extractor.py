@@ -5,6 +5,7 @@ import spacy
 from transformers import AutoTokenizer
 from typing import List
 import re
+from io import BytesIO
 
 def gptCalToken(string: str, encoding_name: str="cl100k_base") -> int:
     # o200k_base for gpt-4o, gpt-4o-mini
@@ -13,11 +14,9 @@ def gptCalToken(string: str, encoding_name: str="cl100k_base") -> int:
     num_tokens = len(encoding.encode(string))
     return num_tokens
 
-def extractPdf(file_path):
-
-    file_name = file_path
+def extractPdf(content:BytesIO | str):
     main_file = []
-    with pdfplumber.open(file_name) as pdf:
+    with pdfplumber.open(content) as pdf:
         for page in pdf.pages:
             main_file.append(page.extract_text())
         pdf.close()
