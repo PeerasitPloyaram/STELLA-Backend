@@ -4,7 +4,7 @@ name: "stella_backend"
 services:
   etcd:
     container_name: milvus-etcd
-    image: quay.io/coreos/etcd:v3.5.5
+    image: quay.io/coreos/etcd:v3.5.16
     environment:
       - ETCD_AUTO_COMPACTION_MODE=revision
       - ETCD_AUTO_COMPACTION_RETENTION=1000
@@ -23,9 +23,8 @@ services:
     container_name: milvus-minio
     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
     environment:
-      TZ: "Asia/Bangkok"
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_SECRET_KEY}
     ports:
       - "9001:9001"
       - "9000:9000"
@@ -40,17 +39,16 @@ services:
 
   standalone:
     container_name: milvus-standalone
-    image: milvusdb/milvus:v2.5.0-beta
+    image: milvusdb/milvus:v2.5.4
     command: ["milvus", "run", "standalone"]
     security_opt:
     - seccomp:unconfined
     environment:
-      TZ: "Asia/Bangkok"
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
     volumes:
-     - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
-     - ./milvus.yaml:/milvus/configs/milvus.yaml
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
+      - ./milvus.yaml:/milvus/configs/milvus.yaml
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
       interval: 30s
