@@ -39,8 +39,13 @@ FRONTEND_QUERY_SOURCE_SCHEMA = CollectionSchema(
     enable_dynamic_field=True
 )
 
+# FRONTEND_QUERY_PARAMS = {
+#     "metric_type": "COSINE",
+#     "index_type": "HNSW",
+#     "params": {"M": 16, "efConstruction": 200}
+# }
 FRONTEND_QUERY_PARAMS = {
     "metric_type": "COSINE",
     "index_type": "HNSW",
-    "params": {"M": 16, "efConstruction": 200}
+    "params": {"M": 8, "efConstruction": 100,"efSearch": 100}
 }

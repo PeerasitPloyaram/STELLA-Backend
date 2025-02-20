@@ -8,7 +8,9 @@ from langchain_milvus import Milvus
 from schema import DATA_SOURCE_SCHEMA, FRONTEND_QUERY_SOURCE_SCHEMA, INDEX_PARAMS, FRONTEND_QUERY_PARAMS
 
 import sys
-sys.path.insert(0, '/Users/peerasit/senior_project/STELLA-Backend')
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from db.service import insertCompanyData, insertGeneralData
 
 class Core:
@@ -457,8 +459,8 @@ if __name__ == "__main__":
                 database_name="new_core",
                 schema=DATA_SOURCE_SCHEMA,
                 dense_embedding_model=HuggingFaceEmbeddings(model_name=os.getenv("DENSE_EMBEDDING_MODEL")),
-                create_first_node=True,
-                system_prune_first_node=True,
+                create_first_node=False,
+                system_prune_first_node=False,
                 token=os.getenv('TOKEN'),
             )
     print("====")
