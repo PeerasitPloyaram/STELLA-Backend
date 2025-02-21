@@ -12,6 +12,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from db.service import insertCompanyData, insertGeneralData
+from db.init import dropAllTables, initSchemaCollections, initData
 
 class Core:
     def __init__(self,
@@ -46,6 +47,12 @@ class Core:
             self.createCollection("cnode_1", system_prune=system_prune_first_node)
             self.createCollection("gnode_1", system_prune=system_prune_first_node)
             self.createFrontEndQueryCollection(system_prune=system_prune_first_node)
+        
+        if system_prune_first_node:
+            dropAllTables()
+            initSchemaCollections()
+            initData()
+            
         
     
     def initDataBase(self):
