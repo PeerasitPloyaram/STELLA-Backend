@@ -3,7 +3,7 @@ import sys
 import os
 from dotenv import load_dotenv
 
-
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 load_dotenv()
 connection = mariadb.connect(
     user=os.getenv("DB_CLIENT_USER"),
@@ -88,21 +88,26 @@ def findDataLoc(names: list)-> dict:
     name_placeholders = ', '.join(prepare)
 
     sql = f"""
-    SELECT c.abbr, lc.collection_name, lc.partition_name
+    SELECT 'company' AS type, c.abbr AS name, lc.collection_name, lc.partition_name
     FROM companies c
     JOIN location_storages lc ON c.location_storage_id = lc.location_storage_id
-    WHERE c.abbr IN ({name_placeholders}) AND c.is_active = 1;
+    WHERE c.abbr IN ({name_placeholders}) AND c.is_active = 1
+
+    UNION ALL
+
+    SELECT 'document' AS type, d.document_name AS name, lc.collection_name, lc.partition_name
+    FROM documents d
+    JOIN location_storages lc ON d.location_storage_id = lc.location_storage_id
+    WHERE d.document_name IN ({name_placeholders}) AND d.is_active = 1
+    
+    ORDER BY 3, 4;
     """
 
     cursor = connection.cursor()
     cursor.execute(sql)
 
-    output = {}
     results = cursor.fetchall()
-    for row in results:
-        name = row[0]
-        output[name] = row
-    return output
+    return results
 
 
 def findCompanies(names: list):
@@ -119,19 +124,6 @@ def findCompanies(names: list):
     for i in buffer:
         a.append(i[0])
     return a
-
-
-# def loadGeneralFileToLlm():
-#     sql = "SELECT documents.document_name, documents.description FROM documents WHERE is_active = 1;"
-#     cursor = connection.cursor()
-#     cursor.execute(statement=sql)
-#     buffer = cursor.fetchall()
-    
-#     a = []
-#     for i in buffer:
-#         temp = f"- **{i[0]}**: {i[1]}"
-#         a.append(temp)
-#     return a
 
 if __name__ == "__main__":
     print(getALLAbbrCompany())

@@ -9,9 +9,11 @@ from schema import DATA_SOURCE_SCHEMA, FRONTEND_QUERY_SOURCE_SCHEMA, INDEX_PARAM
 
 import sys
 import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from db.service import insertCompanyData, insertGeneralData
+from extraction.query_extractor import query_extractorV2
+from db.service import insertCompanyData, insertGeneralData, findDataLoc
 from db.init import dropAllTables, initSchemaCollections, initData
 
 class Core:
@@ -305,8 +307,8 @@ class Core:
 
 
 
-    def search_general_documents(self, query:str, top_k:int=3, ratio:float=0.785):
-        """Search the most relevant general documents for a given query."""
+    def searchCorpus(self, query:str, top_k:int=3, ratio:float=0.785, verbose:bool=False):
+        """Decision user input choose to use what general document (Corpus)"""
 
         cl = Collection(name="frontend_query_general_documents")
         cl.load()
@@ -323,7 +325,8 @@ class Core:
         partition_loc = []
         for entities in results:
             for entity in entities:
-                print(entity)
+                if verbose:
+                    print(entity)
                 if float(entity.distance) >= ratio:
                     partition_loc.append(entity.get("name"))
         return partition_loc
@@ -454,6 +457,73 @@ class Core:
             partition.flush()
             print(f"[DB] Partition {name}: {partition.num_entities} entities")
 
+    def generateMetadataFilters(self, data):
+        conditions = []
+        for entry in data:
+            for company, years in entry.items():
+                company_upper = str(company).upper()
+                if len(years) > 1:
+                    year_condition = " || ".join([f'metadata["year"] == "{year}"' for year in years])
+                    conditions.append(f'(({year_condition}) && metadata["company_name"] == "{company_upper}")')
+                else:
+                    conditions.append(f'(metadata["year"] == "{years[0]}" && metadata["company_name"] == "{company_upper}")')
+
+        return " || ".join(conditions)
+
+    def stlRetreiver(self, user_query_input:str):
+        """
+        Get user input and decide to what corpus or document must use and retreive it
+        
+        return chunks
+        """
+
+        corpus:str = self.searchCorpus(query=user_query_input)
+        companies:str = query_extractorV2(user_query=user_query_input)
+        print(companies)
+
+        name_buffer:list[str] = []
+        for i in companies:
+            name_buffer.append(*i)
+        search:list[str] = name_buffer + corpus
+
+        location = findDataLoc(names=search)
+
+        result = {}
+        for _, partition, collection, _ in location:
+            if collection not in result:
+                result[collection] = {"collection": collection, "partition": [], "filters": []}
+            result[collection]["partition"].append(partition)
+
+        fiber_dict = {list(d.keys())[0]: d for d in companies}
+
+        for collection in result.values():
+            collection["filters"] = [fiber_dict[p] for p in collection["partition"] if p in fiber_dict]
+
+        output = list(result.values())
+        # return output
+
+
+        buffer = []
+        for i in output:
+            # print(i)
+            if len(i["partition"]):
+                meta = self.generateMetadataFilters(i["filters"])
+                config ={
+                    "k": 4 * len(i["partition"]),
+                    "partition_names": i["partition"],
+                    "expr": meta
+                }
+            else:
+                config ={
+                    "k": 4,
+                    "partition_names": i["partition"],
+                }
+            print(config)
+            
+            retreiver = self.initVectorStore(collection_name=i["collection"], partition_names=i["partition"],search_kwargs=config)
+            buffer += (retreiver.invoke(user_query_input))
+
+        return buffer
 
 
 if __name__ == "__main__":
