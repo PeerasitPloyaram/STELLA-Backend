@@ -1,4 +1,4 @@
-
+import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/milvus")
 
@@ -27,8 +27,8 @@ core = Core(
             database_name="new_core",
             schema=DATA_SOURCE_SCHEMA,
             dense_embedding_model=HuggingFaceEmbeddings(model_name=os.getenv("DENSE_EMBEDDING_MODEL")),
-            create_first_node=True,
-            system_prune_first_node=True,
+            create_first_node=False,
+            system_prune_first_node=False,
             token=os.getenv('TOKEN'),
         )
 
@@ -113,3 +113,21 @@ async def upload_file(user_id:str, file: UploadFile = File(...),):
     asyncio.create_task(load(raw_content, file, user_id))
 
     return {"status": True}
+
+
+
+
+from stella.services.service import testLLM
+from fastapi.responses import StreamingResponse
+
+async def generateChatStream(chunks, message):
+    rag = testLLM()
+    print(chunks)
+    async for chunks in rag.astream({"context": chunks, "question": message}):
+        if isinstance(chunks, str):
+            yield chunks
+
+@app.post("/chat/{user_id}")
+async def chat(user_id:str, payload: DataModel):
+    chunks = core.stlRetreiver(user_query_input=payload.data)
+    return StreamingResponse(generateChatStream(chunks=chunks, message=payload.data), media_type="text/event-stream")

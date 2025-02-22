@@ -15,7 +15,7 @@ from chunking.one_report_file import oneReportFileChunking
 
 load_dotenv()
 
-def stlUseGeneral(user_input:str, context):
+def testLLM():
     system_prompt = """
         You are STELLA, a helpful search assistant.
 
@@ -57,10 +57,10 @@ def stlUseGeneral(user_input:str, context):
 
     # Chain
     rag_chain = prompt | rag_llm | StrOutputParser()
+    return rag_chain
 
-    out = rag_chain.invoke({"context": context, "question": user_input})
-
-    return out
+    # out = rag_chain.invoke({"context": context, "question": user_input})
+    # return out
 
 
 # if __name__ == "__main__":
