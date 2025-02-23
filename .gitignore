@@ -225,6 +225,6 @@ pip-selfcheck.json
 /milvus/schema
 /milvus/volumes
 
-/db/init.py
+# /db/init.py
 
 /chunking/pdfs/**
