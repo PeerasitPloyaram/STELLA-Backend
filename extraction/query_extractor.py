@@ -1,14 +1,27 @@
 from newmm_tokenizer.tokenizer import word_tokenize
-from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
-import pythainlp
-import os
-import sys
-from dotenv import load_dotenv
-sys.path.insert(0, "./")
 
-from db.service import findDataLoc
+from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.prompts import PromptTemplate
+
+import pythainlp
+import os, sys
+from dotenv import load_dotenv
+
+sys.path.append(os.path.dirname(os.path.abspath(__name__)))
+from db.service import GetAllCompanies, findDataLoc, findCompanies
+
 load_dotenv()
+
+def createTable(data:dict):
+    table = []
+    table.append("| Stock Name or Abbreviation | Company Name in Thai                     | Company Name in English           |")
+    table.append("    |----------------------------|------------------------------------------|-----------------------------------|")
+
+    for stock, thai_name, english_name in data:
+        table.append(f"    | {stock:<26} | {thai_name:<45} | {english_name:<33} |")
+
+    return "\n".join(table) + "\n    ----"
 
 
 def query_extractorV1(user_input:str):
@@ -54,68 +67,102 @@ def query_extractorV1(user_input:str):
 
 
 def query_extractorV2(user_query:str):
-    subquery_decomposition_template = """
+    system = """
+    You are classifying user questions to determine which companies listed on the SET-listed companies are mentioned and the specific years referenced.
+    The questions may be in Thai or English.
 
-    You are an AI assistant tasked with extracting company abbreviations in SET (Securities Exchange of Thailand) along with relevant years from a user query.
-    Mapping each company's abbreviation to the correct years mentioned in the query.
-    **** If a company is mentioned without a specific year, assume the latest available year (2023).
+    ### SET-listed companies
+    {table}
 
-    **Instructions:**
-    - Identify all company abbreviations in the user query.
-    - Extract the years associated with each company.
-    - If no year is explicitly mentioned, default to "2023".
-    - Format the output as a string copany_name: year where the key is the company abbreviation (lowercase) and the value is a year devider with comma
+    Instructions:
 
-    User-query: {user_query}
+    Extract ALL company stock name or abbreviations from the user's question that match the SET-listed companies
+    Each matching company should be processed separately and included in output
+    Matching should be case-insensitive (e.g., "SCB", "scb", "Scb" all match)
+    Match only the exact stock abbreviation (not the full company names)
+    For EACH matched company from the SET list:
 
-    **Examples:**
+    If no specific year is mentioned, assign 2023
+    If explicit years are mentioned, use those years
 
-    User query: *How are BTS and AOT's incomes different in 2023?*  
+
+    Output a separate line for EACH matched company in format: stockname:year1,year2,...
+    Only output [] if NO companies from the SET list are found
+
+    Rules:
+
+    Check EVERY potential company mention against the SET list
+    Include ALL companies that match the SET list in the output
+    Ignore companies not in the SET list but still output the valid ones
+    All stock names in lowercase in output
+    Each valid company gets its own line of output
+    Use 2023 as default year for all valid companies when no year specified
+    Output must not empty but it can be only [stockname:year1,year2,...] or []
+
+    Format:
+    Input: [user question]
     Output:
-    bts:2023
-    aot:2023
+    [stockname:year1,year2,...]
+    [stockname:year1,year2,...]
+    or
+    []
 
-    **Examples:**
+    Examples:
+    Input: "How are SCB and TRUE's incomes different in 2023?"
+    Output:
+    scb:2023
+    true:2023
 
-    User query: *Total income of scb in 2021 - 2023 compared to the latest aot*  
+    Input: "Total income of SCB in 2021 - 2023 compared to the latest TRUE?"
     Output:
     scb:2021,2022,2023
-    aot:2023
+    true:2023
 
-    **Examples:**
-
-    User query: what is bts
+    Input: "What about AOT's performance in 2022?"
     Output:
-    bts:2023
-
-    *** If can't find company abbreviation return "NoCompanyName"
+    []
     """
 
-    subquery_decomposition_prompt = PromptTemplate(
-        input_variables=["user_query"],
-        template=subquery_decomposition_template
-    )
+    table = createTable(GetAllCompanies())
+    subquery_decomposition_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", system),
+        ("human", "User question: {user_query}"),
+    ])
 
+    # print(system.format(table=table))
     subquery_decomposer_chain = subquery_decomposition_prompt | ChatOpenAI(model=os.getenv("OPEN_AI_MODEL_DECOM"), api_key=os.getenv("OPEN_AI_API_KEY"))
 
-    response = subquery_decomposer_chain.invoke(user_query).content
+    response = subquery_decomposer_chain.invoke({"user_query": user_query, "table": table}).content
+
+    # print(response)
     buffer = []
-    # print(response)
-    if response == "NoCompanyName" or (not response):
+
+    if response == "[]":
+        print("LLM Decision", [])
         return []
-    # print(response)
+    if not response:
+        return response
+    
     for q in response.split('\n'):
         line = q.strip()
-        if not line.startswith("Output:"):
-            if not line.startswith("NoCompanyName"):
-                sp = line.split(":",1)
-                name = sp[0]
-                year = sp[1].split(",")
+        sp = line.split(":",1)
+        name = sp[0]
+        if len(sp) > 1:
+            year = sp[1].split(",")
 
-                buffer.append({
-                    name: year
-                })
-    return buffer
+            buffer.append({
+                name: year
+            })
+            
+    print("LLM Decision", buffer)
+
+    output = []
+    for i in buffer:
+        if findCompanies([list(i.keys())[0]]):
+            output.append(i) 
+    print("LLM Search", output)
+    return output
     
 
 def decompose_query(original_query: str):
@@ -161,25 +208,28 @@ def decompose_query(original_query: str):
 
 if __name__ == "__main__":
     queries = [
-        # "Does BTS have any risk regarding esg that is in line with the business?",
-        # "นโยบาย INDC ของประเทศไทยคืออะไร?",
-        # "What are Thailand's goals under the Paris Agreement?",
-        # "How does Thailand plan to reduce greenhouse gas emissions?",
-        # "การดำเนินงานของประเทศไทยภายใต้ UNFCCC เป็นอย่างไร?",
-        # "INDC ของไทยช่วยลดโลกร้อนอย่างไร?",
+        "Does aav have any risk regarding esg that is in line with the business?",
+        "นโยบาย INDC ของประเทศไทยคืออะไร?",
+        "What are Thailand's goals under the Paris Agreement?",
+        "How does Thailand plan to reduce greenhouse gas emissions?",
+        "การดำเนินงานของประเทศไทยภายใต้ UNFCCC เป็นอย่างไร?",
+        "INDC ของไทยช่วยลดโลกร้อนอย่างไร?",
 
-        # "what is bts",
-        # "เป้าหมาย Nationally Determined Contributions (NDC) ของประเทศไทย"
-        # "BTS มีการตั้งเป้าหมาย climate แต่มีการวัดผลและมี pathway ไหม",
-        # "SCB มี climate อะไรบ้าง",
-        # "What is Thailand's clean energy policy?",
-        # "BTS มีนโยบาย Net Zero ของตัวเองไหม",
-        # "การเปลี่ยนแปลงสภาพภูมิอากาศกระทบต่อแผนพลังงานอย่างไร"
+        "what is advanc, scb ,aot, true?",
+        "เป้าหมาย Nationally Determined Contributions (NDC) ของประเทศไทย",
+        "BTS มีการตั้งเป้าหมาย climate แต่มีการวัดผลและมี pathway ไหม",
+        "SCB มี climate อะไรบ้าง",
+        "What is Thailand's clean energy policy?",
+        "true มีนโยบาย Net Zero ของตัวเองไหม",
+        "การเปลี่ยนแปลงสภาพภูมิอากาศกระทบต่อแผนพลังงานอย่างไร"
     ]
 
     # for i in queries:
-        # print(query_extractorV2(i))
+    #     print(query_extractorV2(i))
+    #     print("==")
 
     # print(decompose_query("bts คือ"))
     # print(query_extractorV1("bts"))
-    print(query_extractorV2("What is aav"))
+    print(query_extractorV2("bts scb และ aot มี cliamte risk ในปี 2023 2024 ยังไง"))
+    # print(createTable(GetAllCompanies()))
+    # print(query_extractorV3("bts"))

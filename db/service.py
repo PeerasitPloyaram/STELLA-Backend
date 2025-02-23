@@ -109,6 +109,14 @@ def findDataLoc(names: list)-> dict:
     results = cursor.fetchall()
     return results
 
+def GetAllCompanies():
+    sql = f"SELECT companies.abbr, companies.company_name_th, companies.company_name_en FROM companies WHERE is_active = 1"
+    
+    cursor = connection.cursor()
+    cursor.execute(statement=sql)
+    buffer = cursor.fetchall()
+    return buffer
+
 
 def findCompanies(names: list):
     prepare = [f"'{name}'" for name in names]

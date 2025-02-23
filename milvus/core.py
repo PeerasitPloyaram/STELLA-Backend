@@ -479,13 +479,14 @@ class Core:
 
         corpus:str = self.searchCorpus(query=user_query_input)
         companies:str = query_extractorV2(user_query=user_query_input)
-        print(companies)
 
         name_buffer:list[str] = []
         for i in companies:
             name_buffer.append(*i)
         search:list[str] = name_buffer + corpus
-
+        print("search", search)
+        if not search:
+            return ["Context Not Found."]
         location = findDataLoc(names=search)
 
         result = {}
@@ -547,3 +548,7 @@ if __name__ == "__main__":
             c = Collection(name=collection).partition(p).num_entities
             print("Partition in", collection, ":", p, "has", c, "entities")
     print("===")
+
+
+    for i in core.stlRetreiver("aot aav คือ"):
+        print(i)
