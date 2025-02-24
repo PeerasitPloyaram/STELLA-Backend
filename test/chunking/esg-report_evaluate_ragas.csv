@@ -1,0 +1,2 @@
+chunk_size,context_precision,context_recall
+RecursiveCharacterText_chunksize500_chunkoverlap100,0.6726,0.7157
