@@ -133,17 +133,6 @@ class Core:
     def findPartition(self, collection:Collection, partitinon_name:str):
         return collection.has_partition(partitinon_name)
 
-    # def createPartition(self,collection: Collection, partition_name, description=""):
-    #     if not collection.has_partition(partition_name):
-    #         print("[DB] Create New Partition")
-    #         cl = collection.create_partition(partition_name=partition_name,
-    #                                             description=description)
-    #         # cl.flush()
-
-    # def drop(self, collection: Collection, partition_name: str):
-    #     collection.drop_partition(partition_name)
-
-
     def getNumEntities(self):
         return self.collection_pointer.num_entities
     
@@ -466,7 +455,8 @@ class Core:
                     year_condition = " || ".join([f'metadata["year"] == "{year}"' for year in years])
                     conditions.append(f'(({year_condition}) && metadata["company_name"] == "{company_upper}")')
                 else:
-                    conditions.append(f'(metadata["year"] == "{years[0]}" && metadata["company_name"] == "{company_upper}")')
+                    conditions.append(f'metadata["year"] == "{years[0]}"')
+                # (metadata["year"] == "{years[0]}" && metadata["company_name"] == "{company_upper}")
 
         return " || ".join(conditions)
 
@@ -549,6 +539,3 @@ if __name__ == "__main__":
             print("Partition in", collection, ":", p, "has", c, "entities")
     print("===")
 
-
-    for i in core.stlRetreiver("aot aav คือ"):
-        print(i)
