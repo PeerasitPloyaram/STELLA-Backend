@@ -173,7 +173,7 @@ def createDocuments(file_path: str, text):
     file_name = path[-1]
     company_name, file_type, year = file_name.split("_")
 
-    company_name = company_name.upper()
+    # company_name = company_name.upper()
     year = year.split(".")[0]
 
     documents = []
