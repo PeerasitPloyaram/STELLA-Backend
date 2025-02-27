@@ -9,7 +9,7 @@ import os, sys
 from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname(os.path.abspath(__name__)))
-from db.service import GetAllCompanies, findDataLoc, findCompanies
+from db.services.service import GetAllCompanies, findDataLoc, findCompanies
 
 load_dotenv()
 
@@ -177,18 +177,16 @@ def decompose_query(original_query: str):
     """
 
     subquery_decomposition_template = """
-    You are an AI assistant tasked with breaking down complex queries about Company in SET: Securities Exchange of Thailand into simpler sub-queries for a RAG system.
+    You are an AI assistant tasked with breaking down complex queries about question companies in Securities Exchange of Thailand:SET into simpler sub-queries for a RAG system.
     Given the original query, decompose it into 2-4 simpler sub-queries that, when answered together, would provide a comprehensive response to the original query.
 
     Original query: {original_query}
 
-    example: What are the impacts of climate change on the environment?
+    example: What is aot and bts?
 
     Sub-queries:
-    1. What are the impacts of climate change on biodiversity?
-    2. How does climate change affect the oceans?
-    3. What are the effects of climate change on agriculture?
-    4. What are the impacts of climate change on human health?
+    1. What is bts?
+    2. What is aot?
 
     *** Use same language as Original query
     """
