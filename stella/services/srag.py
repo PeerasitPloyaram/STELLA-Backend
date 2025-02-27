@@ -1,4 +1,4 @@
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
@@ -13,6 +13,10 @@ import os,sys
 load_dotenv()
 sys.path.insert(0, "D:/STELLA-Backend/")
 sys.path.insert(0, "D:/STELLA-Backend/milvus/")
+sys.path.insert(0, "D:/STELLA-Backend/db/")
+sys.path.insert(0, "D:/STELLA-Backend/db/services/")
+
+from db.services.user_session import getHistory, createGuestSession, saveHistory
 
 from milvus.core import Core
 from milvus.schema import DATA_SOURCE_SCHEMA
@@ -78,6 +82,9 @@ prompt = """
     if you don't have context more than to answer, just say you don't have enough resources for answer this question.
     If you don't know the answer, just say that you don't know
 
+    If the user's query is a simple greeting (e.g., 'hello', 'hi', 'good morning'), respond naturally instead of saying there's not enough resources.
+    If the user's query is a general greeting or an inquiry like 'Who are you?', respond naturally instead of saying there's not enough resources.
+
     - Use markdown to format paragraphs, lists, tables, and quotes whenever possible.
     - Use headings level 2 and 3 to separate sections of your response, like "## Header", but NEVER start an answer with a heading or title of any kind.
     - Use single new lines for lists and double new lines for paragraphs.
@@ -93,7 +100,10 @@ llm_generate = ChatOpenAI(streaming=True, model_name="gpt-4o-mini", temperature=
 prompt = ChatPromptTemplate.from_messages(
     [
         ("system", prompt),
-        ("human", "Question: \n\n{question} \n\n Context: \n\n{context}"),
+        MessagesPlaceholder(variable_name="chat_history"),
+        # ("human", "Question: \n\n{question} \n\n Context: \n\n{context}"),
+        ("Context: Context\n\n{context}"),
+        ("human", "Question: \n\n{question}")
     ]
 )
 
@@ -115,8 +125,10 @@ class GradeHallucinations(BaseModel):
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPEN_AI_API_KEY"))
 structured_llm_grader = llm.with_structured_output(GradeHallucinations)
 
-system = """You are a grader assessing whether an LLM generation is grounded in / supported by a set of retrieved facts.\n 
-Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the set of facts."""
+system = """You are a grader assessing whether an LLM generation is grounded in / supported by a set of retrieved facts.
+\n Give a binary score 'yes' or 'no'. 'Yes' means that the answer is grounded in / supported by the set of facts.\n
+IF don't have any fact give a binay score 'yes'
+"""
 
 hallucination_prompt = ChatPromptTemplate.from_messages(
     [
@@ -143,8 +155,13 @@ llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPEN_AI_
 structured_llm_grader = llm.with_structured_output(GradeAnswer)
 
 # Prompt
-system = """You are a grader assessing whether an answer addresses / resolves a question \n 
-     Give a binary score 'yes' or 'no'. Yes' means that the answer resolves the question."""
+# """You are a grader assessing whether an answer addresses / resolves a question \n 
+#      Give a binary score 'yes' or 'no'. Yes' means that the answer resolves the question."""
+system = """You are a grader assessing whether an answer addresses / resolves a question.  
+- If the question is a general greeting (e.g., 'hello', 'hi', 'who are you?'), and the answer is a natural response, return 'yes'.  
+- Otherwise, return 'yes' only if the answer sufficiently resolves the question.  
+- If the answer is irrelevant or does not resolve the question, return 'no'.
+"""
 answer_prompt = ChatPromptTemplate.from_messages(
     [
         ("system", system),
@@ -204,6 +221,28 @@ class GraphState(TypedDict):
 
 
 ### Nodes
+from stella.services.question_classifier import classifier
+def question_class(state):
+    print("Classify question")
+    question = state["question"]
+
+    pipe = classifier()
+    result = pipe.invoke({"input": question})
+    if result.binary_score == "yes":
+        print("Classify: Extract")
+        return {"question": question, "decide": "extract"}
+    else:
+        print("Classify: Generate")
+        return {"documents": [], "question": question,  "decide": "generate"}
+
+def question_classify(state):
+    d = state["decide"]
+
+    if d == "extract":
+        return "extract"
+    else:
+        return "generate"
+
 def retrieve(state):
     print("Retrieve:")
     question = state["question"]
@@ -215,8 +254,9 @@ def generate(state):
     print("Generate")
     question = state["question"]
     documents = state["documents"]
+    chat_history = getHistory("2e0fa2d7-dcdb-4144-8ebe-66fe62abf90d")
 
-    generation = rag_chain.invoke({"context": documents, "question": question})
+    generation = rag_chain.invoke({"context": documents, "question": question, "chat_history": chat_history})
     return {"documents": documents, "question": question, "generation": generation}
 
 
@@ -284,6 +324,8 @@ def grade_generation_v_documents_and_question(state):
         grade = score.binary_score
         if grade == "yes":
             print("---DECISION: GENERATION ADDRESSES QUESTION---")
+            saveHistory("2e0fa2d7-dcdb-4144-8ebe-66fe62abf90d", message=question, role="human")
+            saveHistory("2e0fa2d7-dcdb-4144-8ebe-66fe62abf90d", message=generation, role="system")
             return "useful"
         else:
             print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
@@ -305,14 +347,21 @@ def grade_generation_v_documents_and_question(state):
 from langgraph.graph import END, StateGraph, START
 workflow = StateGraph(GraphState)
 
-
+workflow.add_node("classify", question_class)
 workflow.add_node("retrieve", retrieve)                 # retrieve
 workflow.add_node("grade_documents", grade_documents)   # grade documents
 workflow.add_node("generate", generate)                 # generatae
 workflow.add_node("transform_query", transform_query)   # transform_query
 
-
-workflow.add_edge(START, "retrieve")
+workflow.add_edge(START, "classify")
+workflow.add_conditional_edges(
+    "classify", question_classify,
+    {
+        "extract": "retrieve",
+        "generate": "generate"
+    }
+)
+# workflow.add_edge(START, "retrieve")
 workflow.add_edge("retrieve", "grade_documents")
 workflow.add_conditional_edges(
     "grade_documents", decide_to_generate,
