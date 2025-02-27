@@ -1,3 +1,4 @@
+from langchain_core.messages import AIMessage, HumanMessage
 from datetime import datetime, timedelta
 import uuid
 import mariadb
@@ -57,7 +58,11 @@ def getHistory(session_uuid):
     # print(respone)
     session_messages = []
     for message, role, date in respone:
-        session_messages.append({"role": role, "message": message, "date": date.strftime("%Y-%m-%d %H:%M:%S")})
+        if role == "human":
+            session_messages.append(HumanMessage(content=message))
+        else:
+            session_messages.append(AIMessage(content=message))
+        # session_messages.append({"role": role, "message": message, "date": date.strftime("%Y-%m-%d %H:%M:%S")})
 
     return session_messages
 

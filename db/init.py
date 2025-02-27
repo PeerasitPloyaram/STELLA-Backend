@@ -204,6 +204,7 @@ def initRoleData():
     ('admin');
     """
     cursor.execute(sql)
+    connection.commit()
 
 def initData():
     sql = """
