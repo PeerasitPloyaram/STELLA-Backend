@@ -8,7 +8,6 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from extraction.query_extractor import query_extractorV1, query_extractorV2
-from db.service import findDataLoc
 
 from chunking.ndc_file import ndcFileChunking
 from chunking.one_report_file import oneReportFileChunking
