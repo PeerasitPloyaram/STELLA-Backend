@@ -1,11 +1,10 @@
 import mariadb
-import sys
-import os
+import sys, os
 from dotenv import load_dotenv
 
-
-
 load_dotenv()
+
+
 connection = mariadb.connect(
     user=os.getenv("DB_CLIENT_USER"),
     password=os.getenv("DB_CLIENT_PASSWORD"),
@@ -16,7 +15,7 @@ connection = mariadb.connect(
 
 cursor = connection.cursor()
 
-def initSchemaCollections():
+def initCorpusSchemaCollections():
     # sql_types = """
     # CREATE TABLE IF NOT EXISTS types (
     #     type_id int NOT NULL AUTO_INCREMENT,
@@ -126,6 +125,85 @@ def initSchemaCollections():
     cursor.execute(sql_company)
     print("Create Schma Successfuly.")
  
+def initUserSchemaCollection():
+    role = """
+    CREATE TABLE IF NOT EXISTS user_roles (
+        role_id int NOT NULL AUTO_INCREMENT,
+
+        name varchar(256) NOT NULL,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+        PRIMARY KEY (role_id)
+    );
+    """
+    cursor.execute(role)
+
+
+    user = """
+    CREATE TABLE IF NOT EXISTS users (
+        user_id int NOT NULL AUTO_INCREMENT,
+        role_id int NOT NULL,
+
+        username varchar(256) NOT NULL,
+        password varchar(256) NOT NULL,
+        email varchar(256) NOT NULL,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+        PRIMARY KEY (user_id),
+        FOREIGN KEY (role_id) REFERENCES user_roles(role_id)
+    );
+    """
+    cursor.execute(user)
+
+
+
+    session = """
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+        chat_session_uuid UUID NOT NULL,
+        user_id int NULL,
+
+        user_type ENUM('guest', 'user') NOT NULL,
+        share BOOLEAN DEFAULT 0,
+        is_active BOOLEAN DEFAULT 1,
+        expire_at TIMESTAMP ,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+        PRIMARY KEY (chat_session_uuid),
+        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+    );
+    """
+    cursor.execute(session)
+
+
+    message = """
+    CREATE TABLE IF NOT EXISTS messages (
+        message_id int NOT NULL AUTO_INCREMENT,
+        chat_session_uuid UUID NOT NULL,
+
+        message TEXT NOT NULL,
+        role ENUM('system', 'human') NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        PRIMARY KEY (message_id),
+        FOREIGN KEY (chat_session_uuid) REFERENCES chat_sessions(chat_session_uuid) ON DELETE CASCADE
+    );
+    """
+    cursor.execute(message)
+
+
+def initRoleData():
+    sql = """
+    INSERT INTO user_roles (name)
+    VALUES
+    ('user'),
+    ('admin');
+    """
+    cursor.execute(sql)
 
 def initData():
     sql = """
@@ -199,9 +277,21 @@ def dropAllTables():
     cursor.execute(sql)
     connection.commit()
 
+
+    sql = "DROP TABLES IF EXISTS messages, chat_sessions"
+    cursor.execute(sql)
+    connection.commit()
+
+    sql = "DROP TABLES IF EXISTS users, user_roles"
+    cursor.execute(sql)
+    connection.commit()
+
+
     # connection.commit()
 
 if __name__ == "__main__":
     dropAllTables()
-    initSchemaCollections()
+    initCorpusSchemaCollections()
+    initUserSchemaCollection()
+    initRoleData()
     initData()
