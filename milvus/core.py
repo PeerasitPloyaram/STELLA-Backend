@@ -1,6 +1,7 @@
 from pymilvus import connections, Collection, utility, db, MilvusClient
 from langchain_core.documents import Document
 from langchain_milvus import Milvus
+from langchain.load import dumps, loads
 # from pymilvus import WeightedRanker
 # from pymilvus.model.sparse.bm25.tokenizers import build_default_analyzer
 # from pymilvus.model.sparse import BM25EmbeddingFunction
@@ -13,8 +14,9 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from extraction.query_extractor import query_extractorV2
-from db.service import insertCompanyData, insertGeneralData, findDataLoc
-from db.init import dropAllTables, initSchemaCollections, initData
+from db.services.service import insertCompanyData, insertGeneralData, findDataLoc
+from db.init import dropAllTables, initCorpusSchemaCollections, initUserSchemaCollection, initData, initRoleData
+from extraction.query_extractor import decompose_query
 
 class Core:
     def __init__(self,
@@ -52,8 +54,10 @@ class Core:
         
         if system_prune_first_node:
             dropAllTables()
-            initSchemaCollections()
+            initCorpusSchemaCollections()
+            initUserSchemaCollection()
             initData()
+            initRoleData()
             
         
     
@@ -141,16 +145,17 @@ class Core:
 
 
     # def initVectorStore(self, collection_name, partition_names:list, host:str="localhost", port:str="19530"):
-    def initVectorStore(self, collection_name, partition_names:list, search_kwargs):
+    # def initVectorStore(self, collection_name, partition_names:list, search_kwargs):
+    def initVectorStore(self, collection_name, partition_names:list):
         client = Milvus(
         embedding_function=self.dense_embedding_model,
         partition_names=partition_names,
         collection_name=collection_name,
         connection_args={
-            "host": "localhost",
-            "port": 19530,
-            "user": "root",
-            "password": "Milvus",
+            "host": os.getenv("MILVUS_URL"),
+            "port": os.getenv("MILVUS_PORT"),
+            "user": os.getenv("MILVUS_ROOT_USER"),
+            "password": os.getenv("MILVUS_ROOT_PASSWORD"),
             "db_name": self.database_name
         },
         index_params=INDEX_PARAMS,
@@ -169,8 +174,9 @@ class Core:
         # }
         client._load(partition_names=partition_names)
 
-        retreiver = client.as_retriever(search_kwargs=search_kwargs)
-        return retreiver
+        return client
+        # retreiver = client.as_retriever(search_kwargs=search_kwargs)
+        # return retreiver
 
 
     def findCollectionGNode(self):
@@ -511,10 +517,97 @@ class Core:
                 }
             print(config)
             
-            retreiver = self.initVectorStore(collection_name=i["collection"], partition_names=i["partition"],search_kwargs=config)
-            buffer += (retreiver.invoke(user_query_input))
+            init_vector = self.initVectorStore(collection_name=i["collection"], partition_names=i["partition"])
+            retriever = init_vector.as_retriever(search_kwargs=config)
+            # buffer += retriever
+            # retriever = self.initVectorStore(collection_name=i["collection"], partition_names=i["partition"],search_kwargs=config)
+            buffer += (retriever.invoke(user_query_input))
 
         return buffer
+    
+
+    def stlSimiraritySearchWithScore(self, user_query_input:str):
+
+        corpus:str = self.searchCorpus(query=user_query_input)
+        companies:str = query_extractorV2(user_query=user_query_input)
+
+        name_buffer:list[str] = []
+        for i in companies:
+            name_buffer.append(*i)
+        search:list[str] = name_buffer + corpus
+        print("search", search)
+        if not search:
+            return []
+        location = findDataLoc(names=search)
+
+        result = {}
+        for _, partition, collection, _ in location:
+            if collection not in result:
+                result[collection] = {"collection": collection, "partition": [], "filters": []}
+            result[collection]["partition"].append(partition)
+
+        fiber_dict = {list(d.keys())[0]: d for d in companies}
+
+        for collection in result.values():
+            collection["filters"] = [fiber_dict[p] for p in collection["partition"] if p in fiber_dict]
+
+        output = list(result.values())
+        # return output
+
+        buffer = []
+        for i in output:
+            # print(i)
+            if len(i["partition"]):
+                meta = self.generateMetadataFilters(i["filters"])
+                config ={
+                    "k": 4 * len(i["partition"]),
+                    "partition_names": i["partition"],
+                    "expr": meta
+                }
+            else:
+                config ={
+                    "k": 4,
+                    "partition_names": i["partition"],
+                }
+            print(config)
+            
+            init_vector = self.initVectorStore(collection_name=i["collection"], partition_names=i["partition"])
+            retriever = init_vector.similarity_search_with_score(query=user_query_input,search_kwargs=config)
+            buffer += retriever
+        return buffer
+    
+    def stlReciprocalRankFusion(self, user_query_input, verbose=False):
+        """
+        Rank aggregation combines rankings from multiple soucre
+        """
+        k = 60
+        queries = decompose_query(user_query_input)
+        if verbose:
+            for i in queries:
+                print(f"query: {i}")
+
+        contexts = []
+        for query in queries:
+            contexts += self.stlSimiraritySearchWithScore(query)
+        
+        # for i in contexts:
+        #     print(i)
+        #     print("====")
+        # print("===========END===========")
+
+        fused_scores = {}
+        for doc, rank in (contexts):
+            doc_str = dumps(doc)
+            # if doc_str not in fused_scores:
+            #     fused_scores[doc_str] = 0
+            fused_scores[doc_str] = fused_scores.get(doc_str, 0) + 1 / (rank + k)
+
+        reranked_results = [
+            (loads(doc), score)
+            for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)
+        ]
+        return [ i[0] for i in reranked_results]
+        
 
 
 if __name__ == "__main__":
