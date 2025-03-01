@@ -60,7 +60,7 @@ def initCorpusSchemaCollections():
         industry_name varchar(256) NOT NULL UNIQUE,
         abbr varchar(32) NOT NULL UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (industry_id)
     );
     """
@@ -72,7 +72,7 @@ def initCorpusSchemaCollections():
         sector_name varchar(256) NOT NULL,
         abbr varchar(32) NOT NULL UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (sector_id),
         industry_id int NOT NULL,
         FOREIGN KEY (industry_id) REFERENCES industries(industry_id)
@@ -86,7 +86,7 @@ def initCorpusSchemaCollections():
         collection_name varchar(64) NOT NULL,
         partition_name varchar(64) NOT NULL UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (location_storage_id)
     );
     """
@@ -98,7 +98,7 @@ def initCorpusSchemaCollections():
         document_name varchar(64) NOT NULL,
         is_active BOOLEAN,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (document_id),
         location_storage_id int NOT NULL,
         FOREIGN KEY (location_storage_id) REFERENCES location_storages(location_storage_id)
@@ -115,7 +115,7 @@ def initCorpusSchemaCollections():
         abbr varchar(16) NOT NULL,
         is_active BOOLEAN,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         sector_id int NOT NULL,
         location_storage_id int NOT NULL,
         FOREIGN KEY (sector_id) REFERENCES sectors(sector_id),
@@ -127,13 +127,13 @@ def initCorpusSchemaCollections():
  
 def initUserSchemaCollection():
     role = """
-    CREATE TABLE IF NOT EXISTS user_roles (
+    CREATE TABLE IF NOT EXISTS roles (
         role_id int NOT NULL AUTO_INCREMENT,
 
         name varchar(256) NOT NULL,
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
         PRIMARY KEY (role_id)
     );
@@ -151,10 +151,10 @@ def initUserSchemaCollection():
         email varchar(256) NOT NULL,
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
         PRIMARY KEY (user_id),
-        FOREIGN KEY (role_id) REFERENCES user_roles(role_id)
+        FOREIGN KEY (role_id) REFERENCES roles(role_id)
     );
     """
     cursor.execute(user)
@@ -171,7 +171,7 @@ def initUserSchemaCollection():
         is_active BOOLEAN DEFAULT 1,
         expire_at TIMESTAMP ,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
         PRIMARY KEY (chat_session_uuid),
         FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
@@ -198,7 +198,7 @@ def initUserSchemaCollection():
 
 def initRoleData():
     sql = """
-    INSERT INTO user_roles (name)
+    INSERT INTO roles (name)
     VALUES
     ('user'),
     ('admin');
@@ -283,7 +283,7 @@ def dropAllTables():
     cursor.execute(sql)
     connection.commit()
 
-    sql = "DROP TABLES IF EXISTS users, user_roles"
+    sql = "DROP TABLES IF EXISTS users, roles"
     cursor.execute(sql)
     connection.commit()
 

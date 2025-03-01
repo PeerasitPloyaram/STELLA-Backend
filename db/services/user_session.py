@@ -47,8 +47,11 @@ def saveHistory(session_uuid, message, role):
 
     cursor = connection.cursor()
     cursor.execute(statement=sql, data=values)
-    connection.commit()
 
+    new_expire = createExpireDate()
+    sql = f'UPDATE chat_sessions SET expire_at = "{new_expire}" WHERE chat_session_uuid = "{session_uuid}";'
+    cursor.execute(statement=sql)
+    connection.commit()
 
 def getHistory(session_uuid):
     sql = f'SELECT messages.message, messages.role, created_at FROM messages WHERE messages.chat_session_uuid = "{session_uuid}";'
