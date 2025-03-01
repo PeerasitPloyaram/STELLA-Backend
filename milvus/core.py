@@ -252,7 +252,7 @@ class Core:
 
 
     def createFrontEndQueryCollection(self, system_prune: bool = False):
-        collection_name = "frontend_query_general_documents"
+        collection_name = "frontend_query_gnode"
         if utility.has_collection(collection_name=collection_name):
             print(f'[DB] Found Collection "{collection_name}".')
             
@@ -295,7 +295,7 @@ class Core:
                 # "sparse_vector": sparse_vector
             })
 
-        cl = Collection(name="frontend_query_general_documents")
+        cl = Collection(name="frontend_query_gnode")
         cl.insert(entities)
         cl.flush()
         print("[DB] Insert Query FrontEnd Successfuly.")
@@ -305,7 +305,7 @@ class Core:
     def searchCorpus(self, query:str, top_k:int=3, ratio:float=0.785, verbose:bool=False):
         """Decision user input choose to use what general document (Corpus)"""
 
-        cl = Collection(name="frontend_query_general_documents")
+        cl = Collection(name="frontend_query_gnode")
         cl.load()
         
         query_embedding = self.dense_embedding_model.embed_query(query)
