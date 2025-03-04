@@ -78,7 +78,7 @@ def query_extractorV2(user_query:str):
 
     Extract ALL company stock name or abbreviations from the user's question that match the SET-listed companies
     Each matching company should be processed separately and included in output
-    Matching should be case-insensitive (e.g., "SCB", "scb", "Scb" all match)
+    Matching should be case-insensitive (e.g., "SCB", "scb", "Scb", "'true'" all match)
     Match only the exact stock abbreviation (not the full company names)
     For EACH matched company from the SET list:
 
@@ -131,7 +131,7 @@ def query_extractorV2(user_query:str):
     ])
 
     # print(system.format(table=table))
-    subquery_decomposer_chain = subquery_decomposition_prompt | ChatOpenAI(model=os.getenv("OPEN_AI_MODEL_DECOM"), api_key=os.getenv("OPEN_AI_API_KEY"))
+    subquery_decomposer_chain = subquery_decomposition_prompt | ChatOpenAI(model="gpt-4o", api_key=os.getenv("OPEN_AI_API_KEY"))
 
     response = subquery_decomposer_chain.invoke({"user_query": user_query, "table": table}).content
 
@@ -166,21 +166,10 @@ def query_extractorV2(user_query:str):
     
 
 def decompose_query(original_query: str):
-    """
-    Decompose the original query into simpler sub-queries.
-    
-    Args:
-    original_query (str): The original complex query
-    
-    Returns:
-    List[str]: A list of simpler sub-queries
-    """
-
     subquery_decomposition_template = """
-    You are an AI assistant tasked with breaking down complex queries about question companies in Securities Exchange of Thailand:SET into simpler sub-queries for a RAG system.
-    Given the original query, decompose it into 2-4 simpler sub-queries that, when answered together, would provide a comprehensive response to the original query.
+    You have received a user query that involves information about companies, and the question relates to multiple companies. Please decompose the question into smaller, relevant sub-questions, ensuring that the company names and key details from the original question are preserved. Do not change the company names or alter the meaning of the questions.
 
-    Original query: {original_query}
+    User question: {original_query}
 
     example: What is aot and bts?
 
@@ -188,7 +177,9 @@ def decompose_query(original_query: str):
     1. What is bts?
     2. What is aot?
 
-    *** Use same language as Original query
+    *** Use same language as User question
+    *** DONT INCLUDE A LIST NUBMER OF EACH QUESTION.
+    *** DONT INCLUDE ANYTHING BEFORE OR AFTER THE QUESTIONS.
     """
 
     subquery_decomposition_prompt = PromptTemplate(
@@ -196,7 +187,7 @@ def decompose_query(original_query: str):
         template=subquery_decomposition_template
     )
 
-    subquery_decomposer_chain = subquery_decomposition_prompt | ChatOpenAI(model=os.getenv("OPEN_AI_MODEL_DECOM"), api_key=os.getenv("OPEN_AI_API_KEY"))
+    subquery_decomposer_chain = subquery_decomposition_prompt | ChatOpenAI(model="gpt-4o", api_key=os.getenv("OPEN_AI_API_KEY"))
 
     response = subquery_decomposer_chain.invoke(original_query).content
     sub_queries = [q.strip() for q in response.split('\n') if q.strip() and not q.strip().startswith('Sub-queries:')]
@@ -226,8 +217,9 @@ if __name__ == "__main__":
     #     print(query_extractorV2(i))
     #     print("==")
 
-    # print(decompose_query("bts คือ"))
+    print(decompose_query("aav กับสิ่งแวดล้อมที่เกี่ยวข้องกับ policy มั้ยเปรียบเทียบกับ true"))
+    # print(createTable(GetAllCompanies()))
     # print(query_extractorV1("bts"))
-    print(query_extractorV2("bts scb และ aot มี cliamte risk ในปี 2023 2024 ยังไง"))
+    # print(query_extractorV2("true มีการจัดการสิ่งแวดล้อมยังไงบ้าง และแตกต่างกับ aot มั้ย"))
     # print(createTable(GetAllCompanies()))
     # print(query_extractorV3("bts"))
