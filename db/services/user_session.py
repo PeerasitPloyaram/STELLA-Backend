@@ -39,6 +39,27 @@ def createGuestSession():
     connection.commit()
     return session_uuid
 
+def SessionIsExpire(session_id):
+    sql = f'SELECT expire_at FROM chat_sessions WHERE chat_session_uuid = "{session_id}"'
+    cursor = connection.cursor()
+    cursor.execute(sql)
+
+    expire_time = cursor.fetchall()[0][0]
+    if datetime.now() > expire_time:
+        return True
+    else:
+        return False
+
+def findSession(session_id):
+    sql = f'SELECT chat_session_uuid FROM chat_sessions WHERE chat_session_uuid = "{session_id}"'
+    cursor = connection.cursor()
+    cursor.execute(sql)
+
+    session = cursor.fetchall()
+    if not session:
+        return False
+    
+    return True
 
 def saveHistory(session_uuid, message, role):
     sql = "INSERT INTO messages (chat_session_uuid, message, role) VALUES (%s, %s, %s)"
@@ -72,4 +93,5 @@ def getHistory(session_uuid):
 if __name__ == "__main__":
     # print(connection)
     # a = (createGuestSession())
+    # print(findSession("f7c8979d-7535-4d0b-9c2b-af3af5deb93f"))
     pass

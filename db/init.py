@@ -2,9 +2,11 @@ import mariadb
 import sys, os
 from dotenv import load_dotenv
 
+sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/")
+from db.services.user import creatHash
+
+
 load_dotenv()
-
-
 connection = mariadb.connect(
     user=os.getenv("DB_CLIENT_USER"),
     password=os.getenv("DB_CLIENT_PASSWORD"),
@@ -123,6 +125,7 @@ def initCorpusSchemaCollections():
     );
     """
     cursor.execute(sql_company)
+    connection.commit()
     print("Create Schma Successfuly.")
  
 def initUserSchemaCollection():
@@ -146,8 +149,8 @@ def initUserSchemaCollection():
         user_id int NOT NULL AUTO_INCREMENT,
         role_id int NOT NULL,
 
-        username varchar(256) NOT NULL,
-        password varchar(256) NOT NULL,
+        username varchar(256) NOT NULL UNIQUE,
+        password varbinary(256) NOT NULL,
         email varchar(256) NOT NULL,
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -194,6 +197,7 @@ def initUserSchemaCollection():
     );
     """
     cursor.execute(message)
+    connection.commit()
 
 
 def initRoleData():
@@ -263,7 +267,6 @@ def initData():
     ;
     """
     cursor.execute(sql)
-
     connection.commit()
 
 def dropAllTables():
@@ -289,6 +292,13 @@ def dropAllTables():
 
 
     # connection.commit()
+
+def initAdminUser():
+    admin_passw = os.getenv("STELLA_ADMIN_PASSWORD")
+    hash = creatHash(admin_passw)
+    admin = f'INSERT INTO users (role_id, username, password, email) VALUES ("2", "stella", "{hash.decode()}", "stella_admin@gmail.com");'
+    cursor.execute(admin)
+    connection.commit()
 
 if __name__ == "__main__":
     dropAllTables()
