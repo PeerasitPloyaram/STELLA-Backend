@@ -2,9 +2,6 @@ from pymilvus import connections, Collection, utility, db, MilvusClient
 from langchain_core.documents import Document
 from langchain_milvus import Milvus
 from langchain.load import dumps, loads
-# from pymilvus import WeightedRanker
-# from pymilvus.model.sparse.bm25.tokenizers import build_default_analyzer
-# from pymilvus.model.sparse import BM25EmbeddingFunction
 
 from schema import DATA_SOURCE_SCHEMA, FRONTEND_QUERY_SOURCE_SCHEMA, INDEX_PARAMS, FRONTEND_QUERY_PARAMS
 
@@ -15,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from extraction.query_extractor import query_extractorV2
 from db.services.service import insertCompanyData, insertGeneralData, findDataLoc
-from db.init import dropAllTables, initCorpusSchemaCollections, initUserSchemaCollection, initData, initRoleData
+from db.init import dropAllTables, initCorpusSchemaCollections, initUserSchemaCollection, initData, initRoleData, initAdminUser
 from extraction.query_extractor import decompose_query
 
 class Core:
@@ -48,6 +45,8 @@ class Core:
 
         self.initDataBase()
         if create_first_node:
+            for i in self.listCollection():
+                self.dropCollection(i)
             self.createCollection("cnode_1", system_prune=system_prune_first_node)
             self.createCollection("gnode_1", system_prune=system_prune_first_node)
             self.createFrontEndQueryCollection(system_prune=system_prune_first_node)
@@ -58,6 +57,7 @@ class Core:
             initUserSchemaCollection()
             initData()
             initRoleData()
+            initAdminUser()
             
         
     
