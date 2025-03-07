@@ -11,9 +11,15 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from extraction.query_extractor import query_extractorV2
-from db.services.service import insertCompanyData, insertGeneralData, findDataLoc
+from db.services.service import (
+    insertGeneralData,
+    findDataLoc, addSQLCompanyDataFile, getCompanyId
+)
 from db.init import dropAllTables, initCorpusSchemaCollections, initUserSchemaCollection, initData, initRoleData, initAdminUser
 from extraction.query_extractor import decompose_query
+
+sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/")
+
 
 class Core:
     def __init__(self,
@@ -373,8 +379,14 @@ class Core:
 
 
     # Isolate
-    def add_document(self, name: str, documents: list[Document], node_type:str, description:str | None=None, sector_id: int | None=None):
-        limit_size = 2
+    def add_document(self, name: str,
+                    documents: list[Document],
+                    node_type:str,
+                    description:str | None=None,
+                    file_name:str | None=None,
+                    file_type:str | None=None
+                    ):
+        limit_size = 5
 
         if node_type == "c":
             nodes = self.findCollectionCNode()
@@ -410,6 +422,12 @@ class Core:
             s.insert(data=chunks)
             s.flush()
             print(f"[DB] Partition {name}: {s.num_entities} entities")
+            if node_type == "c":
+                if not file_name or not file_type:
+                    return "You must add name and type if node type c"
+                company_id:str = getCompanyId(name=name)
+                addSQLCompanyDataFile(company_id=company_id, file_name=file_name, file_type=file_type)
+
         else:
             flag = False
             for node in nodes:
@@ -432,17 +450,17 @@ class Core:
             print(type(current_node))
             current_node.create_partition(partition_name=name, description="")
 
-            if node_type == "c":
-                if sector_id == None:
-                    print("[DB] ERROR: You Must Pass Sector")
-                    return "You must pass sector"
-                insertCompanyData(sector_id=sector_id, abbr=name, collection_name=current_node.name, partition_name=name)
-            else:
+            # if node_type == "c":
+            #     if sector_id == None:
+            #         print("[DB] ERROR: You Must Pass Sector")
+            #         return "You must pass sector"
+            #     insertCompanyData(sector_id=sector_id, abbr=name, collection_name=current_node.name, partition_name=name)
+            if node_type == "g":
                 if description != None:
                     frontend_context = [{"name": name, "description": description}]
                 else:
                     return "You must pass description if node type g"
-                insertGeneralData(document_name=name, collection_name=current_node.name, partition_name=name)
+                insertGeneralData(document_name=name, description=description, collection_name=current_node.name, partition_name=name)
                 self.addFrontEndQueryData(front_end_query=frontend_context)
 
             print("[DB] Create New Partition")
