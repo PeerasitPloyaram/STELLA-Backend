@@ -18,44 +18,6 @@ connection = mariadb.connect(
 cursor = connection.cursor()
 
 def initCorpusSchemaCollections():
-    # sql_types = """
-    # CREATE TABLE IF NOT EXISTS types (
-    #     type_id int NOT NULL AUTO_INCREMENT,
-    #     type_name varchar(64) NOT NULL UNIQUE,
-    #     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    #     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    #     PRIMARY KEY (type_id)
-    # );
-    # """
-    # cursor.execute(sql_types)
-
-    # sql_collection = """
-    # CREATE TABLE IF NOT EXISTS collection_storage (
-    #     storage_id int NOT NULL AUTO_INCREMENT,
-    #     collection_name varchar(64) NOT NULL,
-    #     partition_name varchar(64) NOT NULL UNIQUE,
-    #     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    #     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    #     PRIMARY KEY (storage_id)
-    # );
-    # """
-    # cursor.execute(sql_collection)
-
-    # sql_data = """
-    # CREATE TABLE IF NOT EXISTS documents (
-    #     data_id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    #     name varchar(256) NOT NULL,
-    #     is_active BOOLEAN,
-    #     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    #     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    #     type_id int NOT NULL,
-    #     storage_id int NOT NULL,
-    #     FOREIGN KEY (type_id) REFERENCES types(type_id),
-    #     FOREIGN KEY (storage_id) REFERENCES collection_storage(storage_id)
-    # );
-    # """
-    # cursor.execute(sql_data)
-    # print("Create Schma Successfuly.")
     sql_industry = """
     CREATE TABLE IF NOT EXISTS industries (
         industry_id int NOT NULL AUTO_INCREMENT,
@@ -86,7 +48,7 @@ def initCorpusSchemaCollections():
     CREATE TABLE IF NOT EXISTS location_storages (
         location_storage_id int NOT NULL AUTO_INCREMENT,
         collection_name varchar(64) NOT NULL,
-        partition_name varchar(64) NOT NULL UNIQUE,
+        partition_name varchar(64) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (location_storage_id)
@@ -98,6 +60,7 @@ def initCorpusSchemaCollections():
     CREATE TABLE IF NOT EXISTS documents (
         document_id int NOT NULL AUTO_INCREMENT,
         document_name varchar(64) NOT NULL,
+        description text NOT NULL,
         is_active BOOLEAN,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -125,6 +88,20 @@ def initCorpusSchemaCollections():
     );
     """
     cursor.execute(sql_company)
+
+    sql_company_file = """
+    CREATE TABLE IF NOT EXISTS company_files (
+        file_id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        file_name varchar(256),
+        file_type varchar(16),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        company_id int NOT NULL,
+        FOREIGN KEY (company_id) REFERENCES companies(company_id)
+    );
+    """
+    cursor.execute(sql_company_file)
+
     connection.commit()
     print("Create Schma Successfuly.")
  
@@ -270,9 +247,11 @@ def initData():
     connection.commit()
 
 def dropAllTables():
+    sql = "DROP TABLES IF EXISTS company_files;"
+    cursor.execute(sql)
+    
     sql = "DROP TABLES IF EXISTS companies, documents, location_storages;"
     cursor.execute(sql)
-    # connection.commit()
 
     sql = "DROP TABLES IF EXISTS sectors;"
     cursor.execute(sql)
@@ -291,7 +270,6 @@ def dropAllTables():
     connection.commit()
 
 
-    # connection.commit()
 
 def initAdminUser():
     admin_passw = os.getenv("STELLA_ADMIN_PASSWORD")
