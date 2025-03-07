@@ -18,7 +18,7 @@ import asyncio
 import os, sys
 from io import BytesIO
 
-from db.services.user import createUser, findUser, checkPassword, getUserId, auth
+from db.services.user import createUser, findUser, checkPassword, getUserId, auth, getRole
 from db.services.vector_data import getInfo
 from db.services.service import (
     getAllCompaniesInfo, getAllSector,
@@ -49,6 +49,11 @@ active_connections = {}
 class DataModel(BaseModel):
     data: str
     session: str
+
+class UserSignUpDataModel(BaseModel):
+    username: str
+    password: str
+    email: str
 
 class UserDataModel(BaseModel):
     username: str
@@ -112,22 +117,24 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
 # SignUp / Login
 @app.post("/sign_up/")
-async def signUp(payload: UserDataModel):
-    print(payload.username, payload.password)
-
+async def signUp(payload: UserSignUpDataModel):
     if findUser(payload.username):
-        return {"status": False, "message": "username alrady"}
-    createUser(username=payload.username, password=payload.password, email="")
-    return True
+        return {"status": False, "message": "Username Already Exists."}
+    createUser(username=payload.username, password=payload.password, email=payload.email)
+    return {"status": True, "message": "Create User Succesfully"}
 
 @app.post("/sign_in/")
 async def signIn(payload: UserDataModel):
-    print(payload.username, payload.password)
-
-    found = checkPassword(payload.username, payload.password)
+    found:bool = checkPassword(payload.username, payload.password)
     if found:
-        id = getUserId(username=payload.username)
-        return {"status": True, "user_id": id}
+        id:str = getUserId(username=payload.username)
+        role:str = getRole(username=payload.username)
+        return {
+            "status": True,
+            "user_id": id,
+            "role": role[1],
+            "username": payload.username
+        }
     else:
         return {"status": False}
 
