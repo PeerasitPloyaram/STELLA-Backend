@@ -1,26 +1,33 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableParallel, RunnablePassthrough
 from langchain_openai import ChatOpenAI
-from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
 
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from pprint import pprint
 
+from chunking.one_report_file import oneReportFileChunking
+from chunking.esg_file import esgFileChunking
+from chunking.ndc_file import ndcFileChunking
+
+from db.services.user_session import SessionIsExpire, createGuestSession, findSession
+
 import os,sys
 load_dotenv()
-sys.path.insert(0, "D:/STELLA-Backend/")
-sys.path.insert(0, "D:/STELLA-Backend/milvus/")
-sys.path.insert(0, "D:/STELLA-Backend/db/")
-sys.path.insert(0, "D:/STELLA-Backend/db/services/")
+sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/")
+sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/milvus/")
+sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/db/")
+sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/db/services/")
 
-from db.services.user_session import getHistory, createGuestSession, saveHistory
+from db.services.user_session import getHistory, saveHistory
 
 from milvus.core import Core
 from milvus.schema import DATA_SOURCE_SCHEMA
 from langchain_huggingface import HuggingFaceEmbeddings
+
+from extraction.query_extractor import decompose_query
 
 load_dotenv()
 core = Core(
@@ -60,27 +67,23 @@ grade_prompt = ChatPromptTemplate.from_messages(
 retrieval_grader = grade_prompt | structured_llm_grader
 
 
-# question = "bts กับ esg"
-# docs = core.stlRetreiver(question)
-# for i in docs:
-#     print(i)
-#     print(retrieval_grader.invoke({"question": question, "document": i}))
-#     print("====")
-
-
 
 # MAIN Generation
+#   Write an accurate, detailed, and comprehensive response to the user's question related about
+#   Additional context is provided as "question" after specific questions.
+#   If question has related about more 1 company use must analyst both of data and compare like a you senior job.
+#     Your answer must be precise, of high-quality, and written by an expert using an unbiased and journalistic tone.
+#     Your answer must be written in the same language as the query, even if language preference is different.
+#     if don't have any context, just say just say you don't have enough resources for answer this question.
+#      if you don't have context more than to answer, just say that with this question, you don't have enough resources for answer this question.
 prompt = """
     You are STELLA, senior Data Analyst related about companies data in Securities Exchange of Thailand:SET.
+    Write an accurate, detailed, and comprehensive response to the user's question related about
 
-
-    Write an accurate, detailed, and comprehensive response to the user's question related about 
-    Additional context is provided as "question" after specific questions.
-    If question has related about more 1 company use must analyst both of data and compare like a you senior job.
-    Your answer must be precise, of high-quality, and written by an expert using an unbiased and journalistic tone.
-    Your answer must be written in the same language as the query, even if language preference is different.
-    if you don't have context more than to answer, just say you don't have enough resources for answer this question.
-    If you don't know the answer, just say that you don't know
+    You must answer only using the provided context or chat history.
+    Keep your answer ground in the facts of the Context.
+    If the answer is not found in the context or history, just say just say you don't have enough resources for answer this question.
+    Do not use any external or pre-trained knowledge.
 
     If the user's query is a simple greeting (e.g., 'hello', 'hi', 'good morning'), respond naturally instead of saying there's not enough resources.
     If the user's query is a general greeting or an inquiry like 'Who are you?', respond naturally instead of saying there's not enough resources.
@@ -91,7 +94,7 @@ prompt = """
 
 \n\n
 """
-llm_generate = ChatOpenAI(streaming=True, model_name="gpt-4o-mini", temperature=0 ,api_key=os.getenv("OPEN_AI_API_KEY"))
+llm_generate = ChatOpenAI(streaming=True, model_name="gpt-4o", temperature=0 ,api_key=os.getenv("OPEN_AI_API_KEY"))
 
 # Post-processing
 # def format_docs(docs):
@@ -108,8 +111,6 @@ prompt = ChatPromptTemplate.from_messages(
 )
 
 rag_chain = prompt | llm_generate | StrOutputParser()
-# generation = rag_chain.invoke({"context": docs, "question": question})
-# print(generation)
 
 
 
@@ -161,6 +162,7 @@ system = """You are a grader assessing whether an answer addresses / resolves a 
 - If the question is a general greeting (e.g., 'hello', 'hi', 'who are you?'), and the answer is a natural response, return 'yes'.  
 - Otherwise, return 'yes' only if the answer sufficiently resolves the question.  
 - If the answer is irrelevant or does not resolve the question, return 'no'.
+- If the answer likely don't have enough information to answer this question. retrun 'yes'.
 """
 answer_prompt = ChatPromptTemplate.from_messages(
     [
@@ -180,17 +182,29 @@ answer_grader = answer_prompt | structured_llm_grader
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPEN_AI_API_KEY"))
 
 # Prompt
-system = """You a question re-writer that converts an input question to a better version that is optimized \n 
-     for vectorstore retrieval. Look at the input and try to reason about the underlying semantic intent / meaning."""
+system = """You are a question rewriter that converts an input question into a more precise and optimized version 
+for vector store retrieval. Analyze the input query to understand its semantic intent and refine it for better clarity, 
+relevance, and specificity.
+
+- Ensure the question aligns with the Securities Exchange of Thailand (SET) domain.
+- Preserve company names exactly as they appear in the original query.
+- Clarify ambiguous terms and expand abbreviations when necessary.
+- Maintain the original language of the query.
+- Improve structure for better retrieval performance.
+"""
+
 re_write_prompt = ChatPromptTemplate.from_messages(
     [
         ("system", system),
         (
             "human",
-            "Here is the initial question: \n\n {question} \n Formulate an improved question.",
+            "Here is the initial question related to the Securities Exchange of Thailand (SET): \n\n {question} \n\n"
+            "Formulate an improved question that is clearer and better suited for vector retrieval.\n"
+            "**Ensure company names (e.g., True, AOT, BTS) remain unchanged.**",
         ),
     ]
 )
+
 
 question_rewriter = re_write_prompt | llm | StrOutputParser()
 # question_rewriter.invoke({"question": question})
@@ -218,22 +232,42 @@ class GraphState(TypedDict):
     question: str
     generation: str
     documents: List[str]
+    session_id: str | None
+    counter: int
 
 
 ### Nodes
 from stella.services.question_classifier import classifier
+sys.path.append(os.path.dirname(os.path.abspath(__name__)))
+from db.services.service import GetAllCompanies, findCompanies
+
+def createTable(data:dict):
+    table = []
+    table.append("| Stock Name or Abbreviation | Company Name in Thai                     | Company Name in English           |")
+    table.append("    |----------------------------|------------------------------------------|-----------------------------------|")
+
+    for stock, thai_name, english_name in data:
+        table.append(f"    | {stock:<26} | {thai_name:<45} | {english_name:<33} |")
+
+    return "\n".join(table) + "\n    ----"
+
+
 def question_class(state):
     print("Classify question")
     question = state["question"]
+    session_id = state["session_id"]
+    counter = 0
 
     pipe = classifier()
-    result = pipe.invoke({"input": question})
+    result = pipe.invoke({"input": question, "table": createTable(GetAllCompanies())})
     if result.binary_score == "yes":
         print("Classify: Extract")
-        return {"question": question, "decide": "extract"}
+        # return {"question": question, "decide": "extract"}
+        return {"question": question, "decide": "extract", "counter": counter}
     else:
         print("Classify: Generate")
-        return {"documents": [], "question": question,  "decide": "generate"}
+        # return {"documents": [], "question": question,  "decide": "generate", "session": session_id}
+        return {"documents": [], "question": question,  "decide": "generate", "session": session_id, "counter": counter}
 
 def question_classify(state):
     d = state["decide"]
@@ -243,58 +277,67 @@ def question_classify(state):
     else:
         return "generate"
 
-def retrieve(state):
+def retrieve_and_gradeDco(state):
     print("Retrieve:")
     question = state["question"]
-    documents = core.stlRetreiver(question)
-    return {"documents": documents, "question": question}
-
-
-def generate(state):
-    print("Generate")
-    question = state["question"]
-    documents = state["documents"]
-    chat_history = getHistory("2e0fa2d7-dcdb-4144-8ebe-66fe62abf90d")
-
-    generation = rag_chain.invoke({"context": documents, "question": question, "chat_history": chat_history})
-    return {"documents": documents, "question": question, "generation": generation}
-
-
-def grade_documents(state):
-    print("Check document relevance to question")
-    question = state["question"]
-    documents = state["documents"]
-
+    counter = state["counter"]
+    
+    # documents = []
     relevant_docs = []
-    for doc in documents:
-        score = retrieval_grader.invoke(
-            {"question": question, "document": doc.page_content}
-        )
-        grade = score.binary_score
-        if grade == "yes":
-            print("Document Relevant")
-            relevant_docs.append(doc)
-        else:
-            print("Document Not Relevant")
-            continue
-    return {"documents": relevant_docs, "question": question}
+    sub_query:list = decompose_query(original_query=question)
+    for sub in sub_query:
+        print("Sub Query:", sub)
+        document = core.stlRetreiver(user_query_input=sub)
+        for doc in document:
+            score = retrieval_grader.invoke(
+                {"question": question, "document": doc.page_content}
+            )
+            grade = score.binary_score
+            if grade == "yes":
+                print("Document Relevant")
+                relevant_docs.append(doc)
+            else:
+                print("Document Not Relevant")
+                continue
+    # documents = core.stlRetreiver(question)
 
+    print("CONTEXT:", relevant_docs)
+    # return {"documents": documents, "question": question}
+    return {"documents": relevant_docs, "question": question, "counter": counter}
 
-def transform_query(state):
-    print("Transform Query")
-    question = state["question"]
-    documents = state["documents"]
+# def grade_documents(state):
+#     print("Check document relevance to question")
+#     question = state["question"]
+#     documents = state["documents"]
+#     counter = state["counter"]
 
-    # Re-write question
-    better_question = question_rewriter.invoke({"question": question})
-    return {"documents": documents, "question": better_question}
+#     relevant_docs = []
+#     # if not relevant_docs:
+#     #     return {"documents": [], "question": question}
+#         # return {"documents": [], "question": question, "counter": counter}
+#     for doc in documents:
+#         score = retrieval_grader.invoke(
+#             {"question": question, "document": doc.page_content}
+#         )
+#         grade = score.binary_score
+#         if grade == "yes":
+#             print("Document Relevant")
+#             relevant_docs.append(doc)
+#         else:
+#             print("Document Not Relevant")
+#             continue
+#     # return {"documents": relevant_docs, "question": question}
+#     return {"documents": relevant_docs, "question": question, "counter": counter}
 
-
-### Edges
 def decide_to_generate(state):
     print("Decide to generate or not")
     state["question"]
     filtered_documents = state["documents"]
+    counter = state["counter"]
+    print("Count:", counter)
+    if int(counter) >= 2:
+        print("Decide: Generate")
+        return "generate"
 
     if not filtered_documents:
         print("Decide: No documents has relevant. Transform")
@@ -304,11 +347,53 @@ def decide_to_generate(state):
         return "generate"
 
 
+def generate(state):
+    print("Generate")
+    question = state["question"]
+    documents = state["documents"]
+    session_id = state["session_id"]
+    # counter = state["counter"]
+
+    if findSession(session_id=session_id):
+        if SessionIsExpire(session_id=session_id):
+            session_id = createGuestSession()
+            print("Session: is expire")
+        print("Session: Found and not expire")
+    else:
+        session_id = createGuestSession()
+
+    chat_history = getHistory(session_id)
+
+    generation = rag_chain.invoke({"context": documents, "question": question, "chat_history": chat_history})
+    print(generation)
+    # print("session", session_id)
+    return {"documents": documents, "question": question, "generation": generation, "session": session_id}
+    # return {"documents": documents, "question": question, "generation": generation, "session": session_id, "counter": counter}
+
+
+def transform_query(state):
+    print("Transform Query")
+    question = state["question"]
+    documents = state["documents"]
+    counter = state["counter"]
+    counter += 1
+    # if not documents:
+    #     return {"documents": [], "question": question, "counter": counter}
+
+    # Re-write question
+    better_question = question_rewriter.invoke({"question": question})
+    print("better question", better_question)
+    # return {"documents": documents, "question": better_question}
+    return {"documents": documents, "question": better_question, "counter": counter}
+
+
+### Edges
 def grade_generation_v_documents_and_question(state):
-    print("---CHECK HALLUCINATIONS---")
+    print("Check Hallucination")
     question = state["question"]
     documents = state["documents"]
     generation = state["generation"]
+    session = state["session"]
 
     score = hallucination_grader.invoke(
         {"documents": documents, "generation": generation}
@@ -317,21 +402,19 @@ def grade_generation_v_documents_and_question(state):
 
     # Check hallucination
     if grade == "yes":
-        print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
-        # Check question-answering
-        print("---GRADE GENERATION vs QUESTION---")
-        score = answer_grader.invoke({"question": question, "generation": generation})
-        grade = score.binary_score
-        if grade == "yes":
-            print("---DECISION: GENERATION ADDRESSES QUESTION---")
-            saveHistory("2e0fa2d7-dcdb-4144-8ebe-66fe62abf90d", message=question, role="human")
-            saveHistory("2e0fa2d7-dcdb-4144-8ebe-66fe62abf90d", message=generation, role="system")
-            return "useful"
-        else:
-            print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
-            return "not useful"
+        print("yes")
+        # score = answer_grader.invoke({"question": question, "generation": generation})
+        # grade = score.binary_score
+        # if grade == "yes":
+        #     print("useful")
+        saveHistory(session, message=question, role="human")
+        saveHistory(session, message=generation, role="system")
+        return "useful"
+        # else:
+        #     print("not useful")
+        #     return "not useful"
     else:
-        pprint("---DECISION: GENERATION IS NOT GROUNDED IN DOCUMENTS, RE-TRY---")
+        pprint("not supports")
         return "not supported"
     
 
@@ -348,8 +431,8 @@ from langgraph.graph import END, StateGraph, START
 workflow = StateGraph(GraphState)
 
 workflow.add_node("classify", question_class)
-workflow.add_node("retrieve", retrieve)                 # retrieve
-workflow.add_node("grade_documents", grade_documents)   # grade documents
+workflow.add_node("retrieve", retrieve_and_gradeDco)      # retrieve
+# workflow.add_node("grade_documents", grade_documents)   # grade documents
 workflow.add_node("generate", generate)                 # generatae
 workflow.add_node("transform_query", transform_query)   # transform_query
 
@@ -362,9 +445,9 @@ workflow.add_conditional_edges(
     }
 )
 # workflow.add_edge(START, "retrieve")
-workflow.add_edge("retrieve", "grade_documents")
+# workflow.add_edge("retrieve", "grade_documents")
 workflow.add_conditional_edges(
-    "grade_documents", decide_to_generate,
+    "retrieve", decide_to_generate,
     {
         "transform_query": "transform_query",
         "generate": "generate",
@@ -388,75 +471,19 @@ app = workflow.compile()
 
 
 
+# Add Document
+def oneReportTask(raw:str, file:str, partition_name:str):
+    chunks = oneReportFileChunking(content=raw, file_name=file)
+    core.add_document(name=partition_name, documents=chunks, node_type="c", file_type="one_report", file_name=file)
+    return "Computation completed"
 
+def esgReportTask(raw:str, file:str, partition_name:str):
+    chunks = esgFileChunking(content=raw, file_path=file)
+    core.add_document(name=partition_name, documents=chunks, node_type="c", file_type="esg_report", file_name=file)
+    return "Computation completed"
 
-
-
-
-
-
-
-
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import File, UploadFile
-from fastapi.responses import StreamingResponse
-import asyncio
-
-api = FastAPI()
-
-api.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-active_connections = {}
-class DataModel(BaseModel):
-    data: str
-
-
-@api.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    await websocket.accept()
-    active_connections[user_id] = websocket
-
-    try:
-        while True:
-            message = await websocket.receive_text()
-            print(f"Received message from {user_id}: {message}")
-
-    except WebSocketDisconnect:
-        del active_connections[user_id]
-        print(f"User {user_id} disconnected")
-
-
-
-
-async def generateChatStream(message):
-    text_speed = 30
-    async for chunks in app.astream({"question": message}):
-        for key, value in chunks.items():
-            if "generation" in value:
-                text = value["generation"]
-                # yield text
-                for i in range(0, len(text), text_speed):
-                    chunk = text[i : i + text_speed]
-                    yield chunk
-                    await asyncio.sleep(0.1)  
-
-@api.post("/chat/{user_id}")
-async def chat(user_id:str, payload: DataModel):
-    return StreamingResponse(generateChatStream(message=payload.data), media_type="text/event-stream")
-
-# inputs = {"question": "bts คืออะไร"}
-# for output in app.stream(inputs):
-#     for key, value in output.items():
-#         # Node
-#         pprint(f"Node '{key}':")
-#     pprint("\n---\n")
-
-# pprint(value["generation"])
+def ndcTask(raw:str, file:str, partition_name:str, description:str):
+    chunks = ndcFileChunking(content=raw, file_name=file)
+    # "National disclosure standards for financial climate, climate risk, NFCCC"
+    core.add_document(name=partition_name, documents=chunks, node_type="g", description=description)
+    return "Computation completed"

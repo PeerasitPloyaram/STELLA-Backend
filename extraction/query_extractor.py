@@ -167,7 +167,9 @@ def query_extractorV2(user_query:str):
 
 def decompose_query(original_query: str):
     subquery_decomposition_template = """
-    You have received a user query that involves information about companies, and the question relates to multiple companies. Please decompose the question into smaller, relevant sub-questions, ensuring that the company names and key details from the original question are preserved. Do not change the company names or alter the meaning of the questions.
+    You have received a user query that involves information about companies, and the question relates to multiple companies.
+    Please decompose the question into smaller, relevant sub-questions, ensuring that the company names and key details from the original question are preserved.
+    Do not change the company names or alter the meaning of the questions.
 
     User question: {original_query}
 
@@ -217,7 +219,8 @@ if __name__ == "__main__":
     #     print(query_extractorV2(i))
     #     print("==")
 
-    print(decompose_query("aav กับสิ่งแวดล้อมที่เกี่ยวข้องกับ policy มั้ยเปรียบเทียบกับ true"))
+    # print(decompose_query("แตกต่างกับ bts ยังไง"))
+    # print(decompose_query("aav กับสิ่งแวดล้อมที่เกี่ยวข้องกับ policy มั้ยเปรียบเทียบกับ true"))
     # print(createTable(GetAllCompanies()))
     # print(query_extractorV1("bts"))
     # print(query_extractorV2("true มีการจัดการสิ่งแวดล้อมยังไงบ้าง และแตกต่างกับ aot มั้ย"))

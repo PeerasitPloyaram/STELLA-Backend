@@ -10,13 +10,12 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from extraction.query_extractor import query_extractorV2
+from extraction.query_extractor import query_extractorV2, decompose_query
 from db.services.service import (
     insertGeneralData,
     findDataLoc, addSQLCompanyDataFile, getCompanyId
 )
 from db.init import dropAllTables, initCorpusSchemaCollections, initUserSchemaCollection, initData, initRoleData, initAdminUser
-from extraction.query_extractor import decompose_query
 
 sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/")
 
@@ -500,7 +499,8 @@ class Core:
         search:list[str] = name_buffer + corpus
         print("search", search)
         if not search:
-            return ["Context Not Found."]
+            # return ["Context Not Found."]
+            return []
         location = findDataLoc(names=search)
 
         result = {}
@@ -524,13 +524,14 @@ class Core:
             if len(i["partition"]):
                 meta = self.generateMetadataFilters(i["filters"])
                 config ={
-                    "k": 4 * len(i["partition"]),
+                    # "k": 4 * len(i["partition"]),
+                    "k": 10,
                     "partition_names": i["partition"],
                     "expr": meta
                 }
             else:
                 config ={
-                    "k": 4,
+                    "k": 10,
                     "partition_names": i["partition"],
                 }
             print(config)

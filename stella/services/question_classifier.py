@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import os,sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__name__)))
-from db.services.service import GetAllCompanies, findDataLoc, findCompanies
+from db.services.service import GetAllCompanies
 
 load_dotenv()
 
