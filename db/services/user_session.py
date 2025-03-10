@@ -22,7 +22,7 @@ def get_connection():
 
 def createExpireDate():
     now = datetime.now()
-    expire_time = now + timedelta(hours=2)
+    expire_time = now + timedelta(minutes=30)
     return expire_time.strftime("%Y-%m-%d %H:%M:%S")
 
 def createUserSession(user_id:str):
@@ -192,6 +192,8 @@ def getAllChatHistoryName(user_id:str, session:str|None = None):
         if not session:
             return {"type":"guest", "last_chat": session, "last_message": []}
         if not findSessionIsGuest(session_id=session):
+            return {"type":"guest", "last_chat": session, "last_message": []}
+        if SessionIsExpire(session_id=session):
             return {"type":"guest", "last_chat": session, "last_message": []}
         message_history = getHistoryFormat(session_uuid=session)
         first_message:str = getFirstMessageHistory(session_uuid=session)

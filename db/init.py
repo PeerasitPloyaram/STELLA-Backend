@@ -280,9 +280,27 @@ def initAdminUser():
     cursor.execute(admin)
     connection.commit()
 
+def createDeleteSessionSchuduled():
+    sql = "SET GLOBAL event_scheduler = ON;"
+    cursor.execute(sql)
+    connection.commit()
+
+    sql = f"""
+    CREATE EVENT IF NOT EXISTS delete_expired_sessions
+    ON SCHEDULE EVERY 10 MINUTE
+    DO
+    BEGIN
+        DELETE FROM chat_sessions WHERE expire_at IS NOT NULL AND expire_at < NOW();
+    END
+    """
+    cursor.execute(sql)
+    connection.commit()
+
 if __name__ == "__main__":
     dropAllTables()
     initCorpusSchemaCollections()
     initUserSchemaCollection()
     initRoleData()
     initData()
+    initAdminUser()
+    createDeleteSessionSchuduled()
