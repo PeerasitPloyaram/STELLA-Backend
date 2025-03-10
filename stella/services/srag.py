@@ -13,9 +13,11 @@ from chunking.esg_file import esgFileChunking
 from chunking.ndc_file import ndcFileChunking
 
 from db.services.user_session import SessionIsExpire, createGuestSession, findSession
-
+from exceptions.custom_exception import ChunkingError, EmbeddingError
 import os,sys
+
 load_dotenv()
+
 sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/")
 sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/milvus/")
 sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/db/")
@@ -31,13 +33,13 @@ from extraction.query_extractor import decompose_query
 
 load_dotenv()
 core = Core(
-            database_name="new_core",
-            schema=DATA_SOURCE_SCHEMA,
-            dense_embedding_model=HuggingFaceEmbeddings(model_name=os.getenv("DENSE_EMBEDDING_MODEL")),
-            create_first_node=False,
-            system_prune_first_node=False,
-            token=os.getenv('TOKEN'),
-        )
+        database_name="new_core",
+        schema=DATA_SOURCE_SCHEMA,
+        dense_embedding_model=HuggingFaceEmbeddings(model_name=os.getenv("DENSE_EMBEDDING_MODEL")),
+        create_first_node=False,
+        system_prune_first_node=False,
+        token=os.getenv('TOKEN'),
+    )
 
 
 
@@ -354,15 +356,16 @@ def generate(state):
     session_id = state["session_id"]
     # counter = state["counter"]
 
-    if findSession(session_id=session_id):
-        if SessionIsExpire(session_id=session_id):
-            session_id = createGuestSession()
-            print("Session: is expire")
-        print("Session: Found and not expire")
-    else:
+    if not findSession(session_id=session_id):
+        # if SessionIsExpire(session_id=session_id):
+        #     session_id = createGuestSession()
+        #     print("Session: is expire")
+        # print("Session: Found and not expire")
+    # else:
         session_id = createGuestSession()
 
     chat_history = getHistory(session_id)
+    print(chat_history)
 
     generation = rag_chain.invoke({"context": documents, "question": question, "chat_history": chat_history})
     print(generation)
@@ -469,21 +472,42 @@ app = workflow.compile()
 
 
 
-
-
 # Add Document
 def oneReportTask(raw:str, file:str, partition_name:str):
-    chunks = oneReportFileChunking(content=raw, file_name=file)
-    core.add_document(name=partition_name, documents=chunks, node_type="c", file_type="one_report", file_name=file)
+    chunks = None
+    try:
+        chunks = oneReportFileChunking(content=raw, file_name=file)
+    except:
+        raise ChunkingError("Chunking Error")
+    try:
+        core.add_document(name=partition_name, documents=chunks, node_type="c", file_type="one_report", file_name=file)
+    except:
+        raise EmbeddingError("Embedding Error")
+    
     return "Computation completed"
 
 def esgReportTask(raw:str, file:str, partition_name:str):
-    chunks = esgFileChunking(content=raw, file_path=file)
-    core.add_document(name=partition_name, documents=chunks, node_type="c", file_type="esg_report", file_name=file)
+    chunks = None
+    try:
+        chunks = esgFileChunking(content=raw, file_path=file)
+    except:
+        raise ChunkingError("Chunking Error")
+    try:
+        core.add_document(name=partition_name, documents=chunks, node_type="c", file_type="esg_report", file_name=file)
+    except:
+        raise EmbeddingError("Embedding Error")
     return "Computation completed"
 
 def ndcTask(raw:str, file:str, partition_name:str, description:str):
-    chunks = ndcFileChunking(content=raw, file_name=file)
-    # "National disclosure standards for financial climate, climate risk, NFCCC"
-    core.add_document(name=partition_name, documents=chunks, node_type="g", description=description)
+    chunks = None
+    try:
+        chunks = ndcFileChunking(content=raw, file_name=file)
+    except:
+        raise ChunkingError("Chunking Error")
+    try:
+        # "National disclosure standards for financial climate, climate risk, NFCCC"
+        core.add_document(name=partition_name, documents=chunks, node_type="g", description=description)
+        pass
+    except:
+        raise EmbeddingError("Embedding Error")
     return "Computation completed"

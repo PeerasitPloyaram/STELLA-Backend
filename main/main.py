@@ -2,10 +2,7 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/milvus")
 
-from milvus.core import Core
-from milvus.schema import DATA_SOURCE_SCHEMA, FRONTEND_QUERY_SOURCE_SCHEMA, INDEX_PARAMS, FRONTEND_QUERY_PARAMS
 from dotenv import load_dotenv
-from langchain_huggingface import HuggingFaceEmbeddings
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import StreamingResponse
@@ -15,10 +12,12 @@ from fastapi import File, Form, UploadFile, Response, status
 from pydantic import BaseModel
 import asyncio
 
+import json
 import os, sys
 from io import BytesIO
+from exceptions.custom_exception import ChunkingError, EmbeddingError
 
-from db.services.user import createUser, findUser, checkPassword, getUserId, auth, getRole
+from db.services.user import createUser, findUser, checkPassword, getUserId, auth, getRole, findUserById
 from db.services.vector_data import getInfo
 from db.services.service import (
     getAllCompaniesInfo, getAllSector,
@@ -27,6 +26,13 @@ from db.services.service import (
     updateDescriptionGeneralData,
     deleteGeneralFile, deleteCompanyData, findSQLComapnyDataFile,
     getCompanyId, getALLSQLCompanyDataFile, deleteEachCompanyFileData
+)
+
+from db.services.user_session import (
+    findSession, SessionIsExpire,
+    createGuestSession, createUserSession, findSessionIsGuest,
+    changeGuestSesionToUserSession, getAllChatHistoryName, dropUserSession,
+    findSessionIsOwnByUser
 )
 
 from stella.services.srag import app as ai
@@ -79,6 +85,52 @@ class deleteCompanyEashDataModel(BaseModel):
     file_name:str
     abbr:str
 
+class chatSessionDataModel(BaseModel):
+    user_id:str
+    current_session:str
+
+@app.post("/session/")
+async def getSession(payload:chatSessionDataModel):
+    print("Session Request:",payload.current_session)
+
+    if findUserById(user_id=payload.user_id):
+        if findSession(payload.current_session):
+            if findSessionIsGuest(payload.current_session):
+                changeGuestSesionToUserSession(session_id=payload.current_session, user_id=payload.user_id)
+            new_session_id = payload.current_session
+
+        else:
+            new_session_id = createUserSession(user_id=payload.user_id)
+    
+    else:  
+        if findSession(payload.current_session):
+            new_session_id:str = payload.current_session
+            if SessionIsExpire(payload.current_session):
+                new_session_id = createGuestSession()
+        else:
+            new_session_id = createGuestSession()
+    return {"status": True, "message": new_session_id}
+
+@app.get("/session/getHistory/")
+async def getSession(user_id:str, session_id:str | None):
+    if findUserById(user_id=str(user_id)):
+        if session_id:
+            changeGuestSesionToUserSession(session_id=session_id, user_id=user_id)
+            chat_names = getAllChatHistoryName(user_id=user_id, session=session_id)
+        else:
+            chat_names = getAllChatHistoryName(user_id=user_id)
+    else:
+        chat_names = getAllChatHistoryName(user_id="guest", session=session_id)
+
+    return {"status": True, "message": chat_names}
+
+@app.post("/session/deleteSession")
+async def deleteUserSession(payload:chatSessionDataModel):
+    if findUserById(user_id=str(payload.user_id)):
+        if findSessionIsOwnByUser(user_id=payload.user_id, session=payload.current_session):
+            dropUserSession(user_id=payload.user_id, session_id=payload.current_session)
+            return {"status": True, "message": "Drop User Session Successfully"}
+    
 
 async def generateChatStream(session_id:str, message):
     text_speed = 30
@@ -301,9 +353,31 @@ async def createAsyncGeneralTask(raw, file, type, partition, description):
     return result
 
 async def chunkingGeneralTask(raw, file_name, user_id, type, partition, description):
-    await createAsyncGeneralTask(raw, file_name, type, partition, description)
-    # print(f.filename)
-    await active_connections[user_id].send_text(f"Computation completed: {file_name}")
+    # await createAsyncGeneralTask(raw, file_name, type, partition, description)
+    # # print(f.filename)
+    # await active_connections[user_id].send_text(f"Computation completed: {file_name}")
+    try:
+        await createAsyncGeneralTask(raw, file_name, type, partition, description)
+        noti_template = {
+            "title": "Upload Successfully.",
+            "message":f"Chunking and Embedding File: {file_name} Completed.",
+            "type": "success"
+        }
+        await active_connections[user_id].send_text(json.dumps(noti_template))
+    except ChunkingError:
+        noti_template = {
+            "title": "Upload Failured.",
+            "message":f"Error to Chunking File: {file_name}",
+            "type": "error"
+        }
+        await active_connections[user_id].send_text(json.dumps(noti_template))
+    except EmbeddingError:
+        noti_template = {
+            "title": "Upload Failured.",
+            "message":f"Error to Embedding File: {file_name}",
+            "type": "error"
+        }
+        await active_connections[user_id].send_text(json.dumps(noti_template))
 
 
 @app.post("/manage/upload/generalFile/{user_id}")
@@ -322,7 +396,12 @@ async def upload_file(user_id:str,
         return {"status": False, "message": "Already Name Exits"}
     
     if user_id in active_connections:
-        await active_connections[user_id].send_text(f"Upload started: {file.filename}")
+        noti_template = {
+            "title": "Upload Started",
+            "message":f"Upload File: {file.filename} Started.",
+            "type": "success"
+        }
+        await active_connections[user_id].send_text(json.dumps(noti_template))
 
     asyncio.create_task(chunkingGeneralTask(raw_content, file.filename, user_id, type=name, partition=name, description=description))
     response.status_code = status.HTTP_200_OK
@@ -344,13 +423,6 @@ async def createAsyncCompanyTask(raw, file, type, partition):
         print("[CORE] Create Task etc")
         # task = esgReportTask
         pass
-    # elif type == "ndc":
-    #     print("[CORE] Create Task NDC")
-    #     task = ndcTask
-    # elif type == "general_documents":
-    #     pass
-    # elif type == "company_documents":
-    #     pass
     else:
         return
 
@@ -358,11 +430,29 @@ async def createAsyncCompanyTask(raw, file, type, partition):
     return result
 
 
-async def chunkingTask(raw, file_name, user_id, type, partition):
-    await createAsyncCompanyTask(raw, file_name, type, partition)
-    # print(f.filename)
-    await active_connections[user_id].send_text(f"Computation completed: {file_name}")
-
+async def chunkingCompanyTask(raw, file_name, user_id, type, partition):
+    try:
+        await createAsyncCompanyTask(raw, file_name, type, partition)
+        noti_template = {
+            "title": "Upload Successfully.",
+            "message":f"Chunking and Embedding File: {file_name} Completed.",
+            "type": "success"
+        }
+        await active_connections[user_id].send_text(json.dumps(noti_template))
+    except ChunkingError:
+        noti_template = {
+            "title": "Upload Failured.",
+            "message":f"Error to Chunking File: {file_name}",
+            "type": "error"
+        }
+        await active_connections[user_id].send_text(json.dumps(noti_template))
+    except EmbeddingError:
+        noti_template = {
+            "title": "Upload Failured.",
+            "message":f"Error to Embedding File: {file_name}",
+            "type": "error"
+        }
+        await active_connections[user_id].send_text(json.dumps(noti_template))
 
 @app.post("/manage/upload/companyFile/{user_id}")
 async def upload_file(user_id:str,
@@ -370,6 +460,7 @@ async def upload_file(user_id:str,
                     partition: str= Form(...),
                     file_name: str= Form(...),
                     file: UploadFile = File(...)):
+    
     loc_id:str = getCompanyId(name=partition)
     found:bool = findSQLComapnyDataFile(company_id=loc_id, file_name=file_name)
 
@@ -380,7 +471,12 @@ async def upload_file(user_id:str,
     raw_content = BytesIO(content)
 
     if user_id in active_connections:
-        await active_connections[user_id].send_text(f"Upload started: {file.filename}")
+        noti_template = {
+            "title": "Upload Started",
+            "message":f"Upload File: {file.filename} Started.",
+            "type": "success"
+        }
+        await active_connections[user_id].send_text(json.dumps(noti_template))
 
-    asyncio.create_task(chunkingTask(raw_content, file_name, user_id, type=type, partition=partition))
+    asyncio.create_task(chunkingCompanyTask(raw_content, file_name, user_id, type=type, partition=partition))
     return {"status": True}
