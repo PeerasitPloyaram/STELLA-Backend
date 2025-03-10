@@ -8,13 +8,18 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 load_dotenv()
 
-connection = mariadb.connect(
-    user=os.getenv("DB_CLIENT_USER"),
-    password=os.getenv("DB_CLIENT_PASSWORD"),
-    host=os.getenv("DB_HOST"),
-    port=int(os.getenv("DB_PORT")),
-    database=os.getenv('DB_DATABASE_NAME')
-)
+def get_connection():
+    return mariadb.connect(
+        user=os.getenv("DB_CLIENT_USER"),
+        password=os.getenv("DB_CLIENT_PASSWORD"),
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT")),
+        database=os.getenv("DB_DATABASE_NAME")
+    )
+
+def createUserId():
+    session_uuid = str(uuid.uuid4())
+    return session_uuid
 
 def creatHash(password:str):
     hash_password = bcrypt.hashpw(password=password.encode('utf-8'), salt=os.getenv("STELLA_PASSWORD_SALT").encode('utf-8'))
@@ -22,17 +27,23 @@ def creatHash(password:str):
 
 def createUser(username: str, password: str, email: str):
     sql = f'SELECT role_id FROM roles WHERE name = "user"'
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     role_id = cursor.fetchall()[0][0]
     hash_password = creatHash(password=password)
+    uuid = createUserId()
 
-    sql = f'INSERT INTO users (role_id, username, password, email) VALUES (%s, %s, %s, %s);'
-    cursor.execute(sql, (role_id, username, hash_password, email))
+    sql = f'INSERT INTO users (user_id, role_id, username, password, email) VALUES (%s, %s, %s, %s, %s);'
+    cursor.execute(sql, (uuid, role_id, username, hash_password, email))
     connection.commit()
+    connection.close()
 
 def findUser(username: str, email: str| None = None):
     sql = f'SELECT username FROM users WHERE username = "{username}"'
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     res = cursor.fetchall()
@@ -43,9 +54,22 @@ def findUser(username: str, email: str| None = None):
         return True
     else:
         return False
+    
+def findUserById(user_id: str):
+    sql = f'SELECT username FROM users WHERE user_id = "{user_id}"'
+
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(statement=sql)
+    res = cursor.fetchone()
+    if not res:
+        return False
+    return True
 
 def checkPassword(username: str, password: str):
     sql = f'SELECT password FROM users WHERE username = "{username}"'
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     res = cursor.fetchall()
@@ -65,6 +89,8 @@ def getRole(username:str):
     JOIN roles ON users.role_id = roles.role_id
     WHERE users.username = "{username}"
     """
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(query)
     result = cursor.fetchone()
@@ -74,6 +100,8 @@ def getUserId(username:str):
     query = f"""
     SELECT user_id FROM users WHERE users.username = "{username}"
     """
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(query)
     result = cursor.fetchone()
@@ -86,6 +114,8 @@ def auth(user_id:str):
     JOIN roles ON users.role_id = roles.role_id
     WHERE users.user_id = "{user_id}"
     """
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(query)
     result = cursor.fetchone()
@@ -93,5 +123,5 @@ def auth(user_id:str):
 
 if __name__ == "__main__":
     # createUser("e", "e", "test")
-    print(auth("1"))
+    pass
 
