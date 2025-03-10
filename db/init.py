@@ -123,7 +123,7 @@ def initUserSchemaCollection():
 
     user = """
     CREATE TABLE IF NOT EXISTS users (
-        user_id int NOT NULL AUTO_INCREMENT,
+        user_id UUID NOT NULL,
         role_id int NOT NULL,
 
         username varchar(256) NOT NULL UNIQUE,
@@ -144,7 +144,7 @@ def initUserSchemaCollection():
     session = """
     CREATE TABLE IF NOT EXISTS chat_sessions (
         chat_session_uuid UUID NOT NULL,
-        user_id int NULL,
+        user_id UUID NULL,
 
         user_type ENUM('guest', 'user') NOT NULL,
         share BOOLEAN DEFAULT 0,
@@ -272,9 +272,11 @@ def dropAllTables():
 
 
 def initAdminUser():
+    import uuid
     admin_passw = os.getenv("STELLA_ADMIN_PASSWORD")
     hash = creatHash(admin_passw)
-    admin = f'INSERT INTO users (role_id, username, password, email) VALUES ("2", "stella", "{hash.decode()}", "stella_admin@gmail.com");'
+    uuid = str(uuid.uuid4())
+    admin = f'INSERT INTO users (user_id, role_id, username, password, email) VALUES ("{uuid}", "2", "stella", "{hash.decode()}", "stella_admin@gmail.com");'
     cursor.execute(admin)
     connection.commit()
 
