@@ -13,9 +13,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from extraction.query_extractor import query_extractorV2, decompose_query
 from db.services.service import (
     insertGeneralData,
-    findDataLoc, addSQLCompanyDataFile, getCompanyId
+    findDataLoc, addSQLCompanyDataFile, getCompanyId, findDocument
 )
-from db.init import dropAllTables, initCorpusSchemaCollections, initUserSchemaCollection, initData, initRoleData, initAdminUser
+from db.init import (
+    dropAllTables,
+    initCorpusSchemaCollections,
+    initUserSchemaCollection,
+    initData,
+    initRoleData,
+    initAdminUser,
+    createDeleteSessionSchuduled
+)
 
 sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/")
 
@@ -63,6 +71,7 @@ class Core:
             initData()
             initRoleData()
             initAdminUser()
+            createDeleteSessionSchuduled()
             
         
     
@@ -124,10 +133,8 @@ class Core:
     # Set Pointer to Collection
     def setCollectionPointer(self, collection_name):
         if type(collection_name) == Collection:
-            # print("From Collection")
             self.collection_pointer = collection_name
         else:
-            # print("From String")
             self.collection_pointer = Collection(name=collection_name)
 
     def getCollectionPointer(self) -> Collection:
@@ -149,27 +156,24 @@ class Core:
         return self.collection_pointer.describe()
 
 
-    # def initVectorStore(self, collection_name, partition_names:list, host:str="localhost", port:str="19530"):
-    # def initVectorStore(self, collection_name, partition_names:list, search_kwargs):
     def initVectorStore(self, collection_name, partition_names:list):
         client = Milvus(
-        embedding_function=self.dense_embedding_model,
-        partition_names=partition_names,
-        collection_name=collection_name,
-        connection_args={
-            "host": os.getenv("MILVUS_URL"),
-            "port": os.getenv("MILVUS_PORT"),
-            "user": os.getenv("MILVUS_ROOT_USER"),
-            "password": os.getenv("MILVUS_ROOT_PASSWORD"),
-            "db_name": self.database_name
-        },
-        index_params=INDEX_PARAMS,
-        primary_field="id",
-        vector_field="dense_vector",
-        text_field="text",
-        metadata_field="metadata",
-        enable_dynamic_field=False,
-        auto_id=True,
+            embedding_function=self.dense_embedding_model,
+            partition_names=partition_names, collection_name=collection_name,
+            connection_args={
+                "host": os.getenv("MILVUS_URL"),
+                "port": os.getenv("MILVUS_PORT"),
+                "user": os.getenv("MILVUS_ROOT_USER"),
+                "password": os.getenv("MILVUS_ROOT_PASSWORD"),
+                "db_name": self.database_name
+            },
+            index_params=INDEX_PARAMS,
+            primary_field="id",
+            vector_field="dense_vector",
+            text_field="text",
+            metadata_field="metadata",
+            enable_dynamic_field=False,
+            auto_id=True,
         )
 
         # {
@@ -180,8 +184,6 @@ class Core:
         client._load(partition_names=partition_names)
 
         return client
-        # retreiver = client.as_retriever(search_kwargs=search_kwargs)
-        # return retreiver
 
 
     def findCollectionGNode(self):
@@ -223,7 +225,6 @@ class Core:
                                     num_shards=4,
                                     )
             collection.create_index("dense_vector", INDEX_PARAMS)
-            # self.collection.create_index("sparse_vector", SPARSE_INDEX_PARAMS)
             collection.flush()
             print(f'[DB] Collection "{collection_name}" Is Ready.')
             return collection_name
@@ -248,7 +249,6 @@ class Core:
                                     num_shards=4,
                                     )
             collection.create_index("dense_vector", INDEX_PARAMS)
-            # self.collection.create_index("sparse_vector", SPARSE_INDEX_PARAMS)
             collection.flush()
             print(f'[DB] Collection "{collection_name}" Is Ready.')
             return collection_name
@@ -297,7 +297,6 @@ class Core:
                 "name": doc["name"],
                 "description": doc["description"],
                 "dense_vector": self.dense_embedding_model.embed_query(doc["description"]),
-                # "sparse_vector": sparse_vector
             })
 
         cl = Collection(name="frontend_query_gnode")
@@ -307,7 +306,7 @@ class Core:
 
 
 
-    def searchCorpus(self, query:str, top_k:int=3, ratio:float=0.785, verbose:bool=False):
+    def searchCorpus(self, query:str, top_k:int=3, ratio:float=0.77, verbose:bool=False):
         """Decision user input choose to use what general document (Corpus)"""
 
         cl = Collection(name="frontend_query_gnode")
@@ -327,74 +326,29 @@ class Core:
             for entity in entities:
                 if verbose:
                     print(entity)
+                print(entity.get("name"), entity.distance, ratio)
                 if float(entity.distance) >= ratio:
                     partition_loc.append(entity.get("name"))
         return partition_loc
 
-    # def search_general_documents_hybrid(self, input):
-    #     from pymilvus import WeightedRanker
-
-    #     rerank= WeightedRanker(0.3, 0.8) 
-    #     # from pymilvus import RRFRanker
-
-    #     # rerank = RRFRanker(100)
-    #     from pymilvus import AnnSearchRequest
-    #     search_param_1 = {
-    #         "data": [self.dense_embedding_model.embed_query(input)],
-    #         "anns_field": "dense_vector",
-    #         "param": {
-    #             "metric_type": "IP",
-    #             "params": {"nprobe": 10}
-    #         },
-    #         "limit": 2
-    #     }
-    #     request_1 = AnnSearchRequest(**search_param_1)
-
-    #     b = BM25EmbeddingFunction()
-    #     search_param_2 = {
-    #         "data": b.encode_documents([input]),
-    #         "anns_field": "sparse_vector",
-    #         "param": {
-    #             "metric_type": "IP",
-    #             "params": {}
-    #         },
-    #         "limit": 2
-    #     }
-    #     request_2 = AnnSearchRequest(**search_param_2)
-
-
-    #     reqs = [request_1, request_2]
-    #     client = MilvusClient(db_name=self.database_name, token=self.token)
-    #     client.load_collection("frontend_query_general_documents")
-    #     res = client.hybrid_search(
-    #         collection_name="frontend_query_general_documents",
-    #         reqs=reqs,
-    #         ranker=rerank
-    #     )
-    #     for hits in res:
-    #         print("TopK results:")
-    #         for hit in hits:
-    #             print(hit)
-
-
     # Isolate
-    def add_document(self, name: str,
-                    documents: list[Document],
-                    node_type:str,
-                    description:str | None=None,
+    def add_document(self, name: str, documents: list[Document], node_type:str, description:str | None=None,
                     file_name:str | None=None,
-                    file_type:str | None=None
-                    ):
+                    file_type:str | None=None):
         limit_size = 5
 
         if node_type == "c":
             nodes = self.findCollectionCNode()
         else:
             nodes = self.findCollectionGNode()
+        
+        print("find Collection", nodes)
         found_at = ""
         found_partition = False
 
         for node in nodes:
+            print(node, name)
+            print(self.findPartition(Collection(name=node), name))
             if self.findPartition(Collection(name=node), name):
                 found_partition = True
                 found_at = node
@@ -404,7 +358,6 @@ class Core:
         for doc in documents:
             buffer = {
                 "dense_vector": self.dense_embedding_model.embed_query(doc.page_content),
-                # "sparse_vector": BM25SparseEmbedding(corpus=[""]).embed_query(doc.page_content),
                 "text": doc.page_content,
                 "metadata": doc.metadata
             }
@@ -414,7 +367,7 @@ class Core:
             self.setCollectionPointer(found_at)
             current_node = self.getCollectionPointer()
 
-            print("[DB Found Partition")
+            print("[DB] Found Partition")
             s = current_node.partition(name)
             print(f"[DB] Partition {name}: {s.num_entities} entities")
             s.load()
@@ -479,8 +432,6 @@ class Core:
                     conditions.append(f'(({year_condition}) && metadata["company_name"] == "{company_upper}")')
                 else:
                     conditions.append(f'metadata["year"] == "{years[0]}"')
-                # (metadata["year"] == "{years[0]}" && metadata["company_name"] == "{company_upper}")
-
         return " || ".join(conditions)
 
     def stlRetreiver(self, user_query_input:str):
@@ -498,8 +449,8 @@ class Core:
             name_buffer.append(*i)
         search:list[str] = name_buffer + corpus
         print("search", search)
+
         if not search:
-            # return ["Context Not Found."]
             return []
         location = findDataLoc(names=search)
 
@@ -515,31 +466,34 @@ class Core:
             collection["filters"] = [fiber_dict[p] for p in collection["partition"] if p in fiber_dict]
 
         output = list(result.values())
-        # return output
 
 
         buffer = []
         for i in output:
-            # print(i)
             if len(i["partition"]):
-                meta = self.generateMetadataFilters(i["filters"])
-                config ={
-                    # "k": 4 * len(i["partition"]),
-                    "k": 10,
-                    "partition_names": i["partition"],
-                    "expr": meta
-                }
+                if findDocument(i["partition"][0]):
+                    # For General Corpus File
+                    config ={
+                        "k": 4,
+                        "partition_names": i["partition"],
+                    }
+                else:
+                    # For Company File
+                    meta = self.generateMetadataFilters(i["filters"])
+                    config ={
+                        "k": 8,
+                        "partition_names": i["partition"],
+                        "expr": meta
+                    }
             else:
                 config ={
-                    "k": 10,
+                    "k": 4,
                     "partition_names": i["partition"],
                 }
             print(config)
             
             init_vector = self.initVectorStore(collection_name=i["collection"], partition_names=i["partition"])
             retriever = init_vector.as_retriever(search_kwargs=config)
-            # buffer += retriever
-            # retriever = self.initVectorStore(collection_name=i["collection"], partition_names=i["partition"],search_kwargs=config)
             buffer += (retriever.invoke(user_query_input))
 
         return buffer
@@ -571,11 +525,9 @@ class Core:
             collection["filters"] = [fiber_dict[p] for p in collection["partition"] if p in fiber_dict]
 
         output = list(result.values())
-        # return output
 
         buffer = []
         for i in output:
-            # print(i)
             if len(i["partition"]):
                 meta = self.generateMetadataFilters(i["filters"])
                 config ={
@@ -608,17 +560,10 @@ class Core:
         contexts = []
         for query in queries:
             contexts += self.stlSimiraritySearchWithScore(query)
-        
-        # for i in contexts:
-        #     print(i)
-        #     print("====")
-        # print("===========END===========")
 
         fused_scores = {}
         for doc, rank in (contexts):
             doc_str = dumps(doc)
-            # if doc_str not in fused_scores:
-            #     fused_scores[doc_str] = 0
             fused_scores[doc_str] = fused_scores.get(doc_str, 0) + 1 / (rank + k)
 
         reranked_results = [
