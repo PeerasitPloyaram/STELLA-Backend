@@ -25,6 +25,8 @@ This repository is a backend of STELLA for API Server And SELF RAG System
 - Software
     1. [Python](https://www.python.org/downloads/release/python-3120/) version 3.12
 
+    2. [OpenAI](https://platform.openai.com) Account (for get API KEY)
+
 <br>
 
 ### Caution
@@ -55,7 +57,7 @@ python install -r requirements.text
 
 <br>
 
-4. Store various configuration settings in the ".env" file (must be done before running Docker-Compose).
+4. Change name from .env_example to ".env" and Add Data inside .env (must be done before running Docker-Compose).
 
 
 <br>
