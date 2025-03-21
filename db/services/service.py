@@ -17,13 +17,15 @@ from services.vector_data import (
 )
 
 load_dotenv()
-connection = mariadb.connect(
-    user=os.getenv("DB_CLIENT_USER"),
-    password=os.getenv("DB_CLIENT_PASSWORD"),
-    host=os.getenv("DB_HOST"),
-    port=int(os.getenv("DB_PORT")),
-    database=os.getenv('DB_DATABASE_NAME')
-)
+
+def get_connection():
+    return mariadb.connect(
+        user=os.getenv("DB_CLIENT_USER"),
+        password=os.getenv("DB_CLIENT_PASSWORD"),
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT")),
+        database=os.getenv("DB_DATABASE_NAME")
+    )
 
 client = MilvusClient(db_name=os.getenv("MILVUS_DATABASE_NAME"))
 
@@ -33,6 +35,7 @@ def createNewLocStorage(collection_name:str, partition_name:str):
     sql = "INSERT INTO location_storages (collection_name, partition_name) VALUES (%s, %s)"
     values = (collection_name, partition_name)
 
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql, data=values)
     connection.commit()
@@ -51,7 +54,7 @@ def insertCompanyData(sector_id:int, abbr:str, collection_name: str, partition_n
     if company_name_en != None:
         name_en_insert = company_name_en
 
-    # try:
+    connection = get_connection()
     loc_id = createNewLocStorage(collection_name=collection_name, partition_name=partition_name)
     values = (abbr, 1, sector_id, loc_id, name_th_insert, name_en_insert)
     cursor = connection.cursor()
@@ -65,6 +68,8 @@ def getCompanyId(name:str):
     sql = f"""
     SELECT company_id FROM companies WHERE companies.abbr = "{name}";
     """
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     res = cursor.fetchone()
@@ -79,6 +84,7 @@ def getCompanyLocation(name:str):
     WHERE c.abbr = '{name}';
     """
 
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     res = cursor.fetchone()
@@ -94,6 +100,7 @@ def getALLSQLCompanyDataFile(company_abbr: str):
     WHERE c.abbr = %s;
     """
     
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(sql, (company_abbr,))
     files = cursor.fetchall()
@@ -111,16 +118,18 @@ def getAllCompaniesInfo()-> list:
     WHERE companies.is_active = 1;
     """
     data = []
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     buffer = cursor.fetchall()
     for c in buffer:
         data.append({"abbr":c[0], "name_th":c[1], "name_en":c[2], "sector":c[3]})
-    return data
+    return sorted(data, key=lambda x: x["abbr"])
 
 def getALLAbbrCompany()-> list:
     sql = f"SELECT companies.abbr FROM companies WHERE is_active = 1"
 
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     buffer = cursor.fetchall()
@@ -129,6 +138,7 @@ def getALLAbbrCompany()-> list:
 def GetAllCompanies():
     sql = f"SELECT companies.abbr, companies.company_name_th, companies.company_name_en FROM companies WHERE is_active = 1"
     
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     buffer = cursor.fetchall()
@@ -139,6 +149,8 @@ def addSQLCompanyDataFile(company_id:str, file_name:str, file_type:str):
     sql = f"""
     INSERT INTO company_files (file_name, file_type, company_id) VALUES ("{file_name}", "{file_type}", "{company_id}");
     """
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     connection.commit()
@@ -147,6 +159,8 @@ def findSQLComapnyDataFile(company_id:str, file_name:str):
     sql = f"""
     SELECT file_name FROM company_files WHERE (company_files.file_name = "{file_name}" AND company_files.company_id = "{company_id}");
     """
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     res = cursor.fetchone()
@@ -158,6 +172,8 @@ def deleteSQLCompanyData(name_abbr:str):
     sql = f"""
     DELETE FROM companies WHERE (abbr = "{name_abbr}");
     """
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     connection.commit()
@@ -178,6 +194,8 @@ def deleteSQLCompanyFile(company_id:str):
     sql = f"""
     DELETE FROM company_files WHERE (company_id = "{company_id}");
     """
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     connection.commit()
@@ -186,6 +204,8 @@ def deleteSQLEachCompanyFile(file_name:str):
     sql = f"""
     DELETE FROM company_files WHERE (file_name = "{file_name}");
     """
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     connection.commit()
@@ -208,6 +228,7 @@ def insertGeneralData(document_name:str, description:str, collection_name: str, 
     VALUES (%s, %s, %d, %d)
     """
     # try:
+    connection = get_connection()
     loc_id = createNewLocStorage(collection_name=collection_name, partition_name=partition_name)
     values = (document_name,description, 1, loc_id)
     cursor = connection.cursor()
@@ -218,6 +239,7 @@ def updateSQLDescriptionGeneralData(name:str, new_description:str):
     sql = f'''
     UPDATE documents SET description = "{new_description}" WHERE (document_name = "{name}");
     '''
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     connection.commit()
@@ -233,6 +255,7 @@ def deleteSQLGeneralData(name:str):
     DELETE FROM documents WHERE (document_name = "{name}");
     """
 
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     connection.commit()
@@ -242,6 +265,8 @@ def deleteLocationStorage(id):
     sql = f"""
     DELETE FROM location_storages WHERE (location_storage_id = '{id}');
     """
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     connection.commit()
@@ -250,6 +275,7 @@ def deleteLocationStorage(id):
 def getALLDocumentName()-> list:
     sql = f"SELECT documents.document_name FROM documents WHERE is_active = 1"
 
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     buffer = cursor.fetchall()
@@ -279,6 +305,7 @@ def findDataLoc(names: list)-> dict:
     ORDER BY 3, 4;
     """
 
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(sql)
 
@@ -292,6 +319,7 @@ def findCompany(name:str):
     WHERE is_active = 1 AND companies.abbr = "{name}";
     """
 
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     buffer = cursor.fetchall()
@@ -305,6 +333,7 @@ def findCompanies(names: list):
 
     sql = f"SELECT companies.abbr FROM companies WHERE is_active = 1 AND companies.abbr IN ({name_placeholders})"
 
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     buffer = cursor.fetchall()
@@ -321,6 +350,7 @@ def getDocumentLocation(name:str):
     WHERE d.document_name = '{name}';
     """
 
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     res = cursor.fetchone()
@@ -333,6 +363,7 @@ def getDocumentLocation(name:str):
 def findDocument(names):
     sql = f'SELECT document_name FROM documents WHERE is_active = 1 AND documents.document_name = "{names}";'
 
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     res = cursor.fetchone()
@@ -343,6 +374,8 @@ def findDocument(names):
 
 def getAllSector():
     sql = f"SELECT sector_id, sector_name, abbr FROM sectors"
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     res = cursor.fetchall()
@@ -351,10 +384,12 @@ def getAllSector():
     data = []
     for i in res:
         data.append({"id": i[0], "name": i[1], "abbr": i[2]})
-    return data
+    return sorted(data, key=lambda x: x["name"])
 
 def getAllGeneralFile():
     sql = f"SELECT document_name, description FROM documents"
+
+    connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     res = cursor.fetchall()
@@ -363,7 +398,7 @@ def getAllGeneralFile():
     data = []
     for i in res:
         data.append({"name": i[0], "description": i[1]})
-    return data
+    return sorted(data, key=lambda x: x["name"])
 
 def findCollectionCNode():
     client = MilvusClient(db_name=os.getenv("MILVUS_DATABASE_NAME"))
@@ -384,7 +419,6 @@ def createCnodeCollection()-> str:
     else:
         if isinstance(id := int(current_node.split("_")[1]), int):
             collection_name = f"cnode_{id + 1}"
-            # print("Create", collection_name)
     connections.connect(host="localhost", port="19530", db_name=os.getenv("MILVUS_DATABASE_NAME"))
     collection = Collection(name=collection_name,
                             schema=DATA_SOURCE_SCHEMA,
@@ -400,24 +434,24 @@ def createCnodeCollection()-> str:
 def createNewCompany(abbr:str, name_th:str, name_en:str, sector_id:str):
     limit_size = 5
     nodes = findCollectionCNode()
-    poiter = None
+    pointer = None
 
 
     for node in nodes:
         if len(client.list_partitions(node)) - 1 < limit_size:
-            poiter = node
+            pointer = node
             create = False
             break
         else:
             create = True
     if create:
         new_node = createCnodeCollection()
-        poiter = new_node
+        pointer = new_node
 
-    client.create_partition(collection_name=poiter, partition_name=abbr)
-    client.flush(collection_name=poiter)
-    insertCompanyData(sector_id=sector_id, abbr=abbr, collection_name=poiter, partition_name=abbr, company_name_th=name_th, company_name_en=name_en)
-    print("Create New Company")
+    client.create_partition(collection_name=pointer, partition_name=abbr)
+    client.flush(collection_name=pointer)
+    insertCompanyData(sector_id=sector_id, abbr=abbr, collection_name=pointer, partition_name=abbr, company_name_th=name_th, company_name_en=name_en)
+    # print("Create New Company")
 
 
 
