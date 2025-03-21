@@ -4,7 +4,7 @@ It is a web application that allows users and guests to ask questions and receiv
 
 ###### This project is my Senior Project (014184999) in Computer Science at Kasetsart University.
 
-### Members
+### Member
 - ##### นาย พีรสิษฐ์ พลอยอร่าม 6410451237
 
 <br>
@@ -28,8 +28,8 @@ This repository is a backend of STELLA for API Server And SELF RAG System
 <br>
 
 ### Caution
-This backend is using a large amount of CPU and Memory to run the server. Please stop other processes or programs.
-After First Starting Server first Retrieve Data it must use time to load collection. 
+- ##### This backend is using a large amount of CPU and Memory to run the server. Please stop other processes or programs before run this.
+- ##### After the server starts for the first time, retrieving data takes more time to load the collection into memory.
 
 <br>
 
