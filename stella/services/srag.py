@@ -1,6 +1,4 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import Runnable, RunnableParallel, RunnablePassthrough
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 
@@ -10,11 +8,24 @@ from pprint import pprint
 
 from chunking.one_report_file import oneReportFileChunking
 from chunking.esg_file import esgFileChunking
-from chunking.ndc_file import ndcFileChunking
+from chunking.global_file import globalFileChunking
 
-from db.services.user_session import SessionIsExpire, createGuestSession, findSession
+from db.services.user_session import createGuestSession, findSession
 from exceptions.custom_exception import ChunkingError, EmbeddingError
 import os,sys
+
+from typing import List
+from typing_extensions import TypedDict
+
+
+class GraphState(TypedDict):
+    question: str
+    input_question: str
+    generation: str
+    documents: List[str]
+    session_id: str | None
+    counter: int
+
 
 load_dotenv()
 
@@ -33,7 +44,7 @@ from extraction.query_extractor import decompose_query
 
 load_dotenv()
 core = Core(
-        database_name="new_core",
+        database_name=os.getenv("MILVUS_DATABASE_NAME"),
         schema=DATA_SOURCE_SCHEMA,
         dense_embedding_model=HuggingFaceEmbeddings(model_name=os.getenv("DENSE_EMBEDDING_MODEL")),
         create_first_node=False,
@@ -51,7 +62,7 @@ class GradeDocuments(BaseModel):
         description="Documents are relevant to the question, 'yes' or 'no'"
     )
 
-llm_grader = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPEN_AI_API_KEY"))
+llm_grader = ChatOpenAI(model=os.getenv("OPEN_AI_MODEL_GRADER"), temperature=0, api_key=os.getenv("OPEN_AI_API_KEY"))
 structured_llm_grader = llm_grader.with_structured_output(GradeDocuments)
 
 # Prompt
@@ -71,36 +82,46 @@ retrieval_grader = grade_prompt | structured_llm_grader
 
 
 # MAIN Generation
-#   Write an accurate, detailed, and comprehensive response to the user's question related about
-#   Additional context is provided as "question" after specific questions.
 #   If question has related about more 1 company use must analyst both of data and compare like a you senior job.
 #     Your answer must be precise, of high-quality, and written by an expert using an unbiased and journalistic tone.
-#     Your answer must be written in the same language as the query, even if language preference is different.
+###     Your answer must be written in the same language as the query, even if language preference is different.
 #     if don't have any context, just say just say you don't have enough resources for answer this question.
 #      if you don't have context more than to answer, just say that with this question, you don't have enough resources for answer this question.
+
+    # Keep your answer ground in the facts of the Context
 prompt = """
-    You are STELLA, senior Data Analyst related about companies data in Securities Exchange of Thailand:SET.
-    Write an accurate, detailed, and comprehensive response to the user's question related about
+You are STELLA, a Senior Data Analyst specializing in company data related to the Securities Exchange of Thailand (SET). 
 
-    You must answer only using the provided context or chat history.
-    Keep your answer ground in the facts of the Context.
-    If the answer is not found in the context or history, just say just say you don't have enough resources for answer this question.
-    Do not use any external or pre-trained knowledge.
+When answering questions, ensure that your response is:
 
-    If the user's query is a simple greeting (e.g., 'hello', 'hi', 'good morning'), respond naturally instead of saying there's not enough resources.
-    If the user's query is a general greeting or an inquiry like 'Who are you?', respond naturally instead of saying there's not enough resources.
+1. **Accurate**: Provide detailed, precise information based on the context or history provided.  
+2. **Comprehensive**: Your response should fully address the query, including any necessary context, explanations, or examples.  
+3. **Unbiased**: Present the information objectively, without any personal opinions.  
+4. **Journalistic Tone**: Maintain a neutral, formal tone that aligns with professional industry standards.
 
-    - Use markdown to format paragraphs, lists, tables, and quotes whenever possible.
-    - Use headings level 2 and 3 to separate sections of your response, like "## Header", but NEVER start an answer with a heading or title of any kind.
-    - Use single new lines for lists and double new lines for paragraphs.
+### Guidelines for Responses:
+- **Thoroughness**: Write long-form answers, providing in-depth explanations to all inquiries.  
+- **Format**: Ensure use **markdown** to structure your response effectively (headings, lists, quotes, tables). 
+- **Context-Dependent**: Only use information available from the current chat history or provided context. If the information is not available, kindly state that you don’t have enough resources to answer the query.
+- **Language Consistency**: Generate responses in the same language as the input.
+- **Greeting Responses**: If the user greets you or asks general questions like “Who are you?” or “Hello,” respond naturally, without referring to limitations.
 
-\n\n
+### Specific Instructions:
+- **Answer Structure**: Begin by addressing the user’s query directly, then break down your response into relevant sub-sections or points if needed.  
+- **Clarity**: Avoid unnecessary jargon or complexity; ensure readability for a wide audience, while maintaining professional accuracy.
+
+### Data Comparison:
+- If the question **involves a comparison between two data**,explicitly points out differences, or asks to highlight variations, generate a **simple table** in markdown format.  
+- The table should include the **key metrics of both data** to allow for a structured analysis.
+- After the table, provide **a concise summary analyzing the key differences and insights**.
+
+#### Example Table Format:
+| Metric           | Dataset 1 Value | Dataset 2 Value | Difference/Insight |
+|-----------------|---------------|---------------|----------------|
+| Revenue (THB)  | X             | Y             | Higher revenue in Dataset 1 |
+| Net Profit     | A             | B             | Dataset 2 has better profitability |
 """
-llm_generate = ChatOpenAI(streaming=True, model_name="gpt-4o", temperature=0 ,api_key=os.getenv("OPEN_AI_API_KEY"))
-
-# Post-processing
-# def format_docs(docs):
-#     return "\n\n".join(doc.page_content for doc in docs)
+llm_generate = ChatOpenAI(streaming=True, model_name=os.getenv("OPEN_AI_MODEL_MAIN"), temperature=0 ,api_key=os.getenv("OPEN_AI_API_KEY"))
 
 prompt = ChatPromptTemplate.from_messages(
     [
@@ -125,7 +146,7 @@ class GradeHallucinations(BaseModel):
         description="Answer is grounded in the facts, 'yes' or 'no'"
     )
 
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPEN_AI_API_KEY"))
+llm = ChatOpenAI(model=os.getenv("OPEN_AI_MODEL_GRADER"), temperature=0, api_key=os.getenv("OPEN_AI_API_KEY"))
 structured_llm_grader = llm.with_structured_output(GradeHallucinations)
 
 system = """You are a grader assessing whether an LLM generation is grounded in / supported by a set of retrieved facts.
@@ -154,7 +175,7 @@ class GradeAnswer(BaseModel):
 
 
 # LLM with function call
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPEN_AI_API_KEY"))
+llm = ChatOpenAI(model=os.getenv("OPEN_AI_MODEL_GRADER"), temperature=0, api_key=os.getenv("OPEN_AI_API_KEY"))
 structured_llm_grader = llm.with_structured_output(GradeAnswer)
 
 # Prompt
@@ -181,7 +202,7 @@ answer_grader = answer_prompt | structured_llm_grader
 ### Question Re-writer
 
 # LLM
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPEN_AI_API_KEY"))
+llm = ChatOpenAI(model=os.getenv("OPEN_AI_MODEL_GRADER"), temperature=0, api_key=os.getenv("OPEN_AI_API_KEY"))
 
 # Prompt
 system = """You are a question rewriter that converts an input question into a more precise and optimized version 
@@ -217,27 +238,6 @@ question_rewriter = re_write_prompt | llm | StrOutputParser()
 
 
 
-
-
-
-
-
-
-
-
-
-from typing import List
-from typing_extensions import TypedDict
-
-
-class GraphState(TypedDict):
-    question: str
-    generation: str
-    documents: List[str]
-    session_id: str | None
-    counter: int
-
-
 ### Nodes
 from stella.services.question_classifier import classifier
 sys.path.append(os.path.dirname(os.path.abspath(__name__)))
@@ -257,6 +257,7 @@ def createTable(data:dict):
 def question_class(state):
     print("Classify question")
     question = state["question"]
+    input_question = question
     session_id = state["session_id"]
     counter = 0
 
@@ -265,11 +266,11 @@ def question_class(state):
     if result.binary_score == "yes":
         print("Classify: Extract")
         # return {"question": question, "decide": "extract"}
-        return {"question": question, "decide": "extract", "counter": counter}
+        return {"question": question, "input_question": input_question, "decide": "extract", "counter": counter}
     else:
         print("Classify: Generate")
         # return {"documents": [], "question": question,  "decide": "generate", "session": session_id}
-        return {"documents": [], "question": question,  "decide": "generate", "session": session_id, "counter": counter}
+        return {"documents": [], "question": question, "input_question": input_question, "decide": "generate", "session": session_id, "counter": counter}
 
 def question_classify(state):
     d = state["decide"]
@@ -288,11 +289,12 @@ def retrieve_and_gradeDco(state):
     relevant_docs = []
     sub_query:list = decompose_query(original_query=question)
     for sub in sub_query:
-        print("Sub Query:", sub)
+        # print("Sub Query:", sub)
+        print("[Grade Doc] Question:", sub)
         document = core.stlRetreiver(user_query_input=sub)
         for doc in document:
             score = retrieval_grader.invoke(
-                {"question": question, "document": doc.page_content}
+                {"question": sub, "document": doc.page_content}
             )
             grade = score.binary_score
             if grade == "yes":
@@ -337,7 +339,7 @@ def decide_to_generate(state):
     filtered_documents = state["documents"]
     counter = state["counter"]
     print("Count:", counter)
-    if int(counter) >= 2:
+    if int(counter) >= 1:
         print("Decide: Generate")
         return "generate"
 
@@ -354,14 +356,10 @@ def generate(state):
     question = state["question"]
     documents = state["documents"]
     session_id = state["session_id"]
+    input_question = state["input_question"]
     # counter = state["counter"]
 
     if not findSession(session_id=session_id):
-        # if SessionIsExpire(session_id=session_id):
-        #     session_id = createGuestSession()
-        #     print("Session: is expire")
-        # print("Session: Found and not expire")
-    # else:
         session_id = createGuestSession()
 
     chat_history = getHistory(session_id)
@@ -369,8 +367,31 @@ def generate(state):
 
     generation = rag_chain.invoke({"context": documents, "question": question, "chat_history": chat_history})
     print(generation)
-    # print("session", session_id)
-    return {"documents": documents, "question": question, "generation": generation, "session": session_id}
+
+
+    print("Check Hallucination")
+    score = hallucination_grader.invoke(
+        {"documents": documents, "generation": generation}
+    )
+    grade = score.binary_score
+    if grade == "yes":
+        saveHistory(session_id, message=input_question, role="human")
+        saveHistory(session_id, message=generation, role="system")
+
+        return {"documents": documents, "question": question, "generation": generation, "session": session_id}
+    else:
+        print("Check Hallucination")
+        generation = rag_chain.invoke({"context": documents, "question": question, "chat_history": chat_history})
+        score = hallucination_grader.invoke(
+            {"documents": documents, "generation": generation}
+        )
+        print(score.binary_score)
+        return {"documents": documents, "question": question, "generation": generation, "session": session_id}
+
+
+    # counter_halu += 1
+    # return {"documents": documents, "question": question, "generation": generation, "session": session_id, "counter_halu": counter_halu}
+
     # return {"documents": documents, "question": question, "generation": generation, "session": session_id, "counter": counter}
 
 
@@ -392,33 +413,43 @@ def transform_query(state):
 
 ### Edges
 def grade_generation_v_documents_and_question(state):
-    print("Check Hallucination")
-    question = state["question"]
-    documents = state["documents"]
-    generation = state["generation"]
-    session = state["session"]
+    return "useful"
+    # print("Check Hallucination")
+    # # question = state["question"]
+    # input_question = state["input_question"]
+    # documents = state["documents"]
+    # generation = state["generation"]
+    # session = state["session"]
+    # counter_halu = state["counter_halu"]
+    # grade = state["grade"]
 
-    score = hallucination_grader.invoke(
-        {"documents": documents, "generation": generation}
-    )
-    grade = score.binary_score
+    # score = hallucination_grader.invoke(
+    #     {"documents": documents, "generation": generation}
+    # )
+    # # grade = score.binary_score
+    # grade = "no"
 
-    # Check hallucination
-    if grade == "yes":
-        print("yes")
-        # score = answer_grader.invoke({"question": question, "generation": generation})
-        # grade = score.binary_score
-        # if grade == "yes":
-        #     print("useful")
-        saveHistory(session, message=question, role="human")
-        saveHistory(session, message=generation, role="system")
-        return "useful"
-        # else:
-        #     print("not useful")
-        #     return "not useful"
-    else:
-        pprint("not supports")
-        return "not supported"
+    # print("count", counter_halu)        
+    # # Check hallucination
+    # if grade == "yes" or counter_halu > 1:
+    #     print("yes")
+    #     grade = "yes"
+    #     state["grade"] = grade
+    #     # score = answer_grader.invoke({"question": question, "generation": generation})
+    #     # grade = score.binary_score
+    #     # if grade == "yes":
+    #     #     print("useful")
+    #     print("save question", input_question)
+    #     saveHistory(session, message=input_question, role="human")
+    #     saveHistory(session, message=generation, role="system")
+    #     return "useful"
+    #     # else:
+    #     #     print("not useful")
+    #     #     return "not useful"
+    # else:
+    #     pprint("not supports")
+    #     state["grade"] = "no"
+    #     return "not supported"
     
 
 
@@ -473,6 +504,7 @@ app = workflow.compile()
 
 
 # Add Document
+# Company One Report
 def oneReportTask(raw:str, file:str, partition_name:str):
     chunks = None
     try:
@@ -486,6 +518,7 @@ def oneReportTask(raw:str, file:str, partition_name:str):
     
     return "Computation completed"
 
+# Company ESG Report
 def esgReportTask(raw:str, file:str, partition_name:str):
     chunks = None
     try:
@@ -498,10 +531,29 @@ def esgReportTask(raw:str, file:str, partition_name:str):
         raise EmbeddingError("Embedding Error")
     return "Computation completed"
 
-def ndcTask(raw:str, file:str, partition_name:str, description:str):
+# Company Global File (ETC)
+def etcTask(raw:str, file:str, partition_name:str, start_page:int=1):
     chunks = None
     try:
-        chunks = ndcFileChunking(content=raw, file_name=file)
+        chunks = globalFileChunking(content=raw, file_name=file, start_page=start_page, verbose=True)
+        if chunks == "Faliure":
+            raise ChunkingError("Chunking Error")
+    except:
+        raise ChunkingError("Chunking Error")
+    try:
+        core.add_document(name=partition_name, documents=chunks, node_type="c", file_type="etc", file_name=file)
+        pass
+    except:
+        raise EmbeddingError("Embedding Error")
+    return "Computation completed"
+
+# Global File
+def generalTask(raw:str, file:str, partition_name:str, description:str, start_page:int=1):
+    chunks = None
+    try:
+        chunks = globalFileChunking(content=raw, file_name=file, start_page=start_page, verbose=True)
+        if chunks == "Faliure":
+            raise ChunkingError("Chunking Error")
     except:
         raise ChunkingError("Chunking Error")
     try:

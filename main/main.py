@@ -11,6 +11,7 @@ from fastapi import File, Form, UploadFile, Response, status
 
 from pydantic import BaseModel
 import asyncio
+import httpx
 
 import json
 import os, sys
@@ -36,7 +37,7 @@ from db.services.user_session import (
 )
 
 from stella.services.srag import app as ai
-from stella.services.srag import oneReportTask, esgReportTask, ndcTask
+from stella.services.srag import oneReportTask, esgReportTask, generalTask, etcTask
 
 load_dotenv()
 
@@ -134,16 +135,30 @@ async def deleteUserSession(payload:chatSessionDataModel):
 
 async def generateChatStream(session_id:str, message):
     text_speed = 30
-    async for chunks in ai.astream({"question": message, "session_id": session_id}):
-        for key, value in chunks.items():
-            if "generation" in value:
-                text = value["generation"]
-                # yield text
-                for i in range(0, len(text), text_speed):
-                    chunk = text[i : i + text_speed]
-                    yield chunk
-                    await asyncio.sleep(0.1)  
+    try:
+        flag = True
+        async for chunks in ai.astream({"question": message, "session_id": session_id}):
+            for key, value in chunks.items():
+                if "documents" in value and flag:
+                    yield "generating"
+                    flag = False
 
+                if "generation" in value:
+                    text = value["generation"]
+                    for i in range(0, len(text), text_speed):
+                        chunk = text[i : i + text_speed]
+                        yield chunk
+                        await asyncio.sleep(0.1)  
+    except httpx.RemoteProtocolError as e:
+        print(f"Remote protocol error while streaming: {e}")
+        raise HTTPException(status_code=503, detail="External service error")
+    except asyncio.CancelledError:
+        print("Stream was cancelled")
+        raise HTTPException(status_code=408, detail="Request Timeout")
+    except Exception as e:
+        print(f"Unexpected error occurred: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    
 # Main Chat Stream
 @app.post("/chat/")
 async def chat(payload: DataModel):
@@ -222,13 +237,13 @@ async def manageGetCompany(response: Response):
     
 @app.get("/manage/get/companyFile/{company}")
 async def manageGetCompany(company:str, response: Response):
-    # try:
+    try:
         res = getALLSQLCompanyDataFile(company_abbr=company)
         response.status_code = status.HTTP_200_OK
         return {"status": True, "info": res}
-    # except:
-    #     response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    #     return {"status": False, "info": ""}
+    except:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"status": False, "info": ""}
 
 @app.get("/manage/get/general")
 async def manageGetCompany(response: Response):
@@ -261,7 +276,7 @@ async def authMiddleware(payload: AddCompanyDataModel, response: Response):
     try:
         createNewCompany(abbr=payload.abbr, name_th=payload.name_th,
                         name_en=payload.name_en, sector_id=payload.sector_id)
-        return {"status": True, "message": "Add New Company Succesful"}
+        return {"status": True, "message": "Add New Company Succesfully."}
     except:
         response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
         return {"status": False, "message": "Error"}
@@ -274,13 +289,13 @@ async def authMiddleware(payload: updateDescriptionGeneralDataModel, response: R
         response.status_code = status.HTTP_200_OK
         return {"status": False, "message": "Not Found"}
     
-    # try:
-    updateDescriptionGeneralData(name=payload.name, new_description=payload.description)
-    response.status_code = status.HTTP_200_OK
-    return {"status": True, "message": "Update Description Succesfully"}
-    # except:
-    #     response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    #     return {"status": False, "message": "Error"}
+    try:
+        updateDescriptionGeneralData(name=payload.name, new_description=payload.description)
+        response.status_code = status.HTTP_200_OK
+        return {"status": True, "message": "Update Description Succesfully"}
+    except:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"status": False, "message": "Error"}
     
 
 @app.post("/manage/delete/generalFile")
@@ -290,13 +305,13 @@ async def authMiddleware(payload: deleteDataModel, response: Response):
         response.status_code = status.HTTP_200_OK
         return {"status": False, "message": "Not Found"}
     
-    # try:
-    deleteGeneralFile(name=payload.name)
-    response.status_code = status.HTTP_200_OK
-    return {"status": True, "message": "Delete File Succesfully"}
-    # except:
-    #     response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    #     return {"status": False, "message": "Error"}
+    try:
+        deleteGeneralFile(name=payload.name)
+        response.status_code = status.HTTP_200_OK
+        return {"status": True, "message": "Delete File Succesfully"}
+    except:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"status": False, "message": "Error"}
 
 @app.post("/manage/delete/company")
 async def authMiddleware(payload: deleteDataModel, response: Response):
@@ -305,13 +320,13 @@ async def authMiddleware(payload: deleteDataModel, response: Response):
         response.status_code = status.HTTP_200_OK
         return {"status": False, "message": "Not Found"}
     
-    # try:
-    deleteCompanyData(name=payload.name)
-    response.status_code = status.HTTP_200_OK
-    return {"status": True, "message": "Delete File Succesfully"}
-    # except:
-    #     response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    #     return {"status": False, "message": "Error"}
+    try:
+        deleteCompanyData(name=payload.name)
+        response.status_code = status.HTTP_200_OK
+        return {"status": True, "message": "Delete File Succesfully"}
+    except:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"status": False, "message": "Error"}
 
 
 @app.post("/manage/delete/companyFile")
@@ -321,13 +336,13 @@ async def authMiddleware(payload: deleteCompanyEashDataModel, response: Response
         response.status_code = status.HTTP_200_OK
         return {"status": False, "message": "Not Found"}
     
-    # try:
-    deleteEachCompanyFileData(file_name=payload.file_name, company_abbr=payload.abbr)
-    response.status_code = status.HTTP_200_OK
-    return {"status": True, "message": "Delete File Succesfully"}
-    # except:
-    #     response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    #     return {"status": False, "message": "Error"}
+    try:
+        deleteEachCompanyFileData(file_name=payload.file_name, company_abbr=payload.abbr)
+        response.status_code = status.HTTP_200_OK
+        return {"status": True, "message": "Delete File Succesfully"}
+    except:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return {"status": False, "message": "Error"}
 
 
 
@@ -336,28 +351,15 @@ async def authMiddleware(payload: deleteCompanyEashDataModel, response: Response
 
 
 # Add General Document
-async def createAsyncGeneralTask(raw, file, type, partition, description):
-    # if type == True:
-    print("[CORE] Create Task NDC")
-    task = ndcTask
-    # elif type == "general_documents":
-    #     pass
-    # elif type == "company_documents":
-    #     pass
-    # elif type == "etc":
-    #     pass
-    # else:
-    #     return
-
-    result = await asyncio.to_thread(task, raw, file, partition, description)
+async def createAsyncGeneralTask(raw, file, partition, description, start_page):
+    print("[CORE] Create Task General")
+    task = generalTask
+    result = await asyncio.to_thread(task, raw, file, partition, description, start_page)
     return result
 
-async def chunkingGeneralTask(raw, file_name, user_id, type, partition, description):
-    # await createAsyncGeneralTask(raw, file_name, type, partition, description)
-    # # print(f.filename)
-    # await active_connections[user_id].send_text(f"Computation completed: {file_name}")
+async def chunkingGeneralTask(raw, file_name, user_id, partition, description, start_page):
     try:
-        await createAsyncGeneralTask(raw, file_name, type, partition, description)
+        await createAsyncGeneralTask(raw, file_name, partition, description, start_page)
         noti_template = {
             "title": "Upload Successfully.",
             "message":f"Chunking and Embedding File: {file_name} Completed.",
@@ -381,11 +383,12 @@ async def chunkingGeneralTask(raw, file_name, user_id, type, partition, descript
 
 
 @app.post("/manage/upload/generalFile/{user_id}")
-async def upload_file(user_id:str,
-                    response: Response,
+async def upload_file(user_id:str, response: Response,
                     name: str= Form(...),
                     description: str= Form(...),
-                    file: UploadFile = File(...)):
+                    file: UploadFile = File(...),
+                    start_page: int= Form(...)
+                ):
     
     content = await file.read()
     raw_content = BytesIO(content)
@@ -403,7 +406,7 @@ async def upload_file(user_id:str,
         }
         await active_connections[user_id].send_text(json.dumps(noti_template))
 
-    asyncio.create_task(chunkingGeneralTask(raw_content, file.filename, user_id, type=name, partition=name, description=description))
+    asyncio.create_task(chunkingGeneralTask(raw_content, file.filename, user_id, partition=name, description=description, start_page=start_page))
     response.status_code = status.HTTP_200_OK
     return {"status": True}
 
@@ -412,7 +415,7 @@ async def upload_file(user_id:str,
 
 
 # Add Company Document
-async def createAsyncCompanyTask(raw, file, type, partition):
+async def createAsyncCompanyTask(raw, file, type, partition, start_page):
     if type == "56-1":
         print("[CORE] Create Task 56-1")
         task = oneReportTask
@@ -421,8 +424,9 @@ async def createAsyncCompanyTask(raw, file, type, partition):
         task = esgReportTask
     elif type == "etc":
         print("[CORE] Create Task etc")
-        # task = esgReportTask
-        pass
+        task = etcTask
+        result = await asyncio.to_thread(task, raw, file, partition, start_page)
+        return result
     else:
         return
 
@@ -430,9 +434,9 @@ async def createAsyncCompanyTask(raw, file, type, partition):
     return result
 
 
-async def chunkingCompanyTask(raw, file_name, user_id, type, partition):
+async def chunkingCompanyTask(raw, file_name, user_id, type, partition, start_page):
     try:
-        await createAsyncCompanyTask(raw, file_name, type, partition)
+        await createAsyncCompanyTask(raw, file_name, type, partition, start_page=start_page)
         noti_template = {
             "title": "Upload Successfully.",
             "message":f"Chunking and Embedding File: {file_name} Completed.",
@@ -459,7 +463,8 @@ async def upload_file(user_id:str,
                     type: str = Form(...),
                     partition: str= Form(...),
                     file_name: str= Form(...),
-                    file: UploadFile = File(...)):
+                    file: UploadFile = File(...),
+                    start_page: int= Form(...)):
     
     loc_id:str = getCompanyId(name=partition)
     found:bool = findSQLComapnyDataFile(company_id=loc_id, file_name=file_name)
@@ -473,10 +478,10 @@ async def upload_file(user_id:str,
     if user_id in active_connections:
         noti_template = {
             "title": "Upload Started",
-            "message":f"Upload File: {file.filename} Started.",
+            "message":f"Upload File: {file_name} Started.",
             "type": "success"
         }
         await active_connections[user_id].send_text(json.dumps(noti_template))
 
-    asyncio.create_task(chunkingCompanyTask(raw_content, file_name, user_id, type=type, partition=partition))
+    asyncio.create_task(chunkingCompanyTask(raw_content, file_name, user_id, type=type, partition=partition, start_page=start_page))
     return {"status": True}
