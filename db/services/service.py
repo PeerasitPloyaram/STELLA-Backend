@@ -4,8 +4,8 @@ import sys
 import os
 from dotenv import load_dotenv
 
-sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/")
-sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/db/")
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from milvus.schema import INDEX_PARAMS, DATA_SOURCE_SCHEMA
 from services.vector_data import (

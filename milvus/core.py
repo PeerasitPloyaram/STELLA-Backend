@@ -25,8 +25,7 @@ from db.init import (
     createDeleteSessionSchuduled
 )
 
-sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/")
-
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class Core:
     def __init__(self,

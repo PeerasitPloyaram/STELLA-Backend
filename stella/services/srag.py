@@ -5,6 +5,9 @@ from langchain_core.output_parsers import StrOutputParser
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from pprint import pprint
+import os,sys
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from chunking.one_report_file import oneReportFileChunking
 from chunking.esg_file import esgFileChunking
@@ -12,7 +15,6 @@ from chunking.global_file import globalFileChunking
 
 from db.services.user_session import createGuestSession, findSession
 from exceptions.custom_exception import ChunkingError, EmbeddingError
-import os,sys
 
 from typing import List
 from typing_extensions import TypedDict
@@ -29,10 +31,7 @@ class GraphState(TypedDict):
 
 load_dotenv()
 
-sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/")
-sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/milvus/")
-sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/db/")
-sys.path.insert(0, "/Users/peerasit/senior_project/STELLA-Backend/db/services/")
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) + "/milvus")
 
 from db.services.user_session import getHistory, saveHistory
 
