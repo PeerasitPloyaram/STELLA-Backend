@@ -22,8 +22,12 @@ def globalFileChunking(content:BytesIO | str, file_name:str, verbose=False, star
             buffer.append(p.extract_text())
         pdf.close()
 
+    chunk_size:int = 1000
+    if page_size > 40:
+        chunk_size = 1200
+
     text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        encoding_name="o200k_base", chunk_size=1000, chunk_overlap=500
+        encoding_name="o200k_base", chunk_size=chunk_size, chunk_overlap=500
     )
 
     metadata = [{"file_name": file} for _ in buffer]
