@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import os,sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__name__)))
-from db.services.service import GetAllCompanies
+from db.services.service import GetAllCompanies, getALLDocument
 
 load_dotenv()
 
@@ -22,7 +22,16 @@ def createTable(data:dict):
 
     return "\n".join(table) + "\n    ----"
 
-load_dotenv()
+def createDocTable(data:dict):
+    table = []
+    table.append("| File Name | Description |")
+    table.append("|-----------|-------------|")
+
+
+    for data in data:
+        table.append(f"| {data["name"]} | {data["description"]} |")
+
+    return "\n".join(table) + "\n---------------------------"
 
 def classifier():
     llm = ChatOpenAI(model="gpt-4o", api_key=os.getenv("OPEN_AI_API_KEY"))
@@ -34,10 +43,15 @@ def classifier():
     system_prompt = """
     You are a classifier assessing whether an user question
     you task is classify the following user question as either 'extract' or 'generate'.
-    Give a binary score 'yes' or 'no'. 'Yes' means use 'extract' if the question requires retrieving external knowledge or have simarity in Company Listed.
+    Give a binary score 'yes' or 'no'.
+    'Yes' means use 'extract' if the question requires retrieving external knowledge or have simarity in Company Listed or have file name or description simarity in General File Listed.
+    'No' means use 'generate' if it can be answered using only conversation history.
+
     Company Listed:
     {table}
-    'No' means use 'generate' if it can be answered using only conversation history.
+
+    General File Listed:
+    {general_file}
 
     Example:
     what is true?
@@ -58,7 +72,6 @@ def classifier():
 
 
 if __name__ == "__main__":
-    # pass
     a = classifier()
-    s = a.invoke({"input":"true", "table": createTable(GetAllCompanies())})
+    s = a.invoke({"input":"มาตราฐานสิ่งแวดล้อมในไทยคือ", "table": createTable(GetAllCompanies()), "general_file": createDocTable(getALLDocument())})
     print(s)
