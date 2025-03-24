@@ -272,14 +272,14 @@ def deleteLocationStorage(id):
     connection.commit()
 
 
-def getALLDocumentName()-> list:
-    sql = f"SELECT documents.document_name FROM documents WHERE is_active = 1"
+def getALLDocument()-> list:
+    sql = f"SELECT documents.document_name, documents.description FROM documents WHERE is_active = 1"
 
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     buffer = cursor.fetchall()
-    return [c[0] for c in buffer]
+    return [{"name": c[0], "description": c[1]} for c in buffer]
 
 
 def findDataLoc(names: list)-> dict:
@@ -360,8 +360,8 @@ def getDocumentLocation(name:str):
     return {"collection_name": res[0], "partition_name": res[1], "storage_id": res[2]}
 
 
-def findDocument(names):
-    sql = f'SELECT document_name FROM documents WHERE is_active = 1 AND documents.document_name = "{names}";'
+def findDocument(name):
+    sql = f'SELECT document_name FROM documents WHERE is_active = 1 AND documents.document_name = "{name}";'
 
     connection = get_connection()
     cursor = connection.cursor()

@@ -64,11 +64,15 @@ def deleteVectorCompany(collection:str, partition:str):
 
 
 def deleteVectorEachCompanyFile(collection:str, partition:str, file_name:str):
-    print(client.delete(
+    client.delete(
         collection_name=collection,
         partition_name=partition,
         filter=f"metadata['file_name'] == '{file_name}'"
-    ))
+    )
+
+def countEntity(collection:str, partition:str):
+    count = client.get_partition_stats(collection_name=collection, partition_name=partition)
+    return count["row_count"]
 
 if __name__ == "__main__":
     pass
