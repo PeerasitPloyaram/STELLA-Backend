@@ -25,6 +25,8 @@ from db.init import (
     createDeleteSessionSchuduled
 )
 
+from db.services.vector_data import ( countEntity )
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class Core:
@@ -472,8 +474,13 @@ class Core:
             if len(i["partition"]):
                 if findDocument(i["partition"][0]):
                     # For General Corpus File
+                    count = countEntity(collection=i["collection"], partition=i["partition"][0])
+                    size_k = 4
+                    
+                    if count > 40:
+                        size_k = 8
                     config ={
-                        "k": 4,
+                        "k": size_k,
                         "partition_names": i["partition"],
                     }
                 else:
