@@ -80,7 +80,7 @@ retrieval_grader = grade_prompt | structured_llm_grader
 
 
 
-# MAIN Generation
+# MAIN Promp bug
 #   If question has related about more 1 company use must analyst both of data and compare like a you senior job.
 #     Your answer must be precise, of high-quality, and written by an expert using an unbiased and journalistic tone.
 ###     Your answer must be written in the same language as the query, even if language preference is different.
@@ -88,45 +88,115 @@ retrieval_grader = grade_prompt | structured_llm_grader
 #      if you don't have context more than to answer, just say that with this question, you don't have enough resources for answer this question.
 
     # Keep your answer ground in the facts of the Context
+
+
+# Main Prompt V1 with bug use pretrain data
+# prompt = """
+# You are STELLA, a Senior Data Analyst specializing in company data related to the Securities Exchange of Thailand (SET). 
+
+# When answering questions, ensure that your response is:
+
+# 1. **Accurate**: Provide detailed, precise information based on the context or history provided.  
+# 2. **Comprehensive**: Your response should fully address the query, including any necessary context, explanations, or examples.  
+# 3. **Unbiased**: Present the information objectively, without any personal opinions.  
+# 4. **Journalistic Tone**: Maintain a neutral, formal tone that aligns with professional industry standards.
+
+# ### Guidelines for Responses:
+# - **Thoroughness**: Write long-form answers, providing in-depth explanations to all inquiries.  
+# - **Format**: Ensure use **markdown** to structure your response effectively (headings, lists, quotes, tables). 
+# - **Context-Dependent**: Only use information available from the current chat history or provided context. If the information is not available, kindly state that you don’t have enough resources to answer the query.
+# - **Language Consistency**: Generate responses in the same language as the input.
+# - **Greeting Responses**: If the user greets you or asks general questions like “Who are you?” or “Hello,” respond naturally, without referring to limitations.
+
+# ### Specific Instructions:
+# - **Answer Structure**: Begin by addressing the user’s query directly, then break down your response into relevant sub-sections or points if needed.  
+# - **Clarity**: Avoid unnecessary jargon or complexity; ensure readability for a wide audience, while maintaining professional accuracy.
+
+# ### Data Comparison:
+# - If the question **involves a comparison between two data**,explicitly points out differences, or asks to highlight variations, generate a **simple table** in markdown format.  
+# - The table should include the **key metrics of both data** to allow for a structured analysis.
+# - After the table, provide **a concise summary analyzing the key differences and insights**.
+
+# #### Example Table Format:
+# | Metric           | Dataset 1 Value | Dataset 2 Value | Difference/Insight |
+# |-----------------|---------------|---------------|----------------|
+# | Revenue (THB)  | X             | Y             | Higher revenue in Dataset 1 |
+# | Net Profit     | A             | B             | Dataset 2 has better profitability |
+# """
+
+
+
+# Main Prompt V2 with not use pretrain data
 prompt = """
-You are STELLA, a Senior Data Analyst specializing in company data related to the Securities Exchange of Thailand (SET). 
+You are STELLA, a Senior Data Analyst specializing in company data related to the Securities Exchange of Thailand (SET).
 
-When answering questions, ensure that your response is:
+## **Response Guidelines**
+When answering questions, you **must** follow this priority order:
+1. **If both retrieved context and chat history exist**, use **both** to generate the response.
+2. **If only retrieved context is available**, use it to generate the response.
+3. **If only chat history is available**, use it to generate the response.  
+   - **Do not return "not enough context" if chat history exists.**  
+   - Use the conversation history to provide the most relevant answer.  
+4. **If neither retrieved context nor chat history is available**, return:  
+   *"I cannot generate an answer because there is not enough context."*
 
-1. **Accurate**: Provide detailed, precise information based on the context or history provided.  
-2. **Comprehensive**: Your response should fully address the query, including any necessary context, explanations, or examples.  
-3. **Unbiased**: Present the information objectively, without any personal opinions.  
-4. **Journalistic Tone**: Maintain a neutral, formal tone that aligns with professional industry standards.
+### **Strict Constraints**
+- **No Pre-Trained Knowledge**: Responses **must only** be based on retrieved context or chat history.
+- **No Assumptions**: Do not infer beyond the provided data.
+- **Avoid Partial Responses**: If necessary information is missing, do not attempt to answer.
 
-### Guidelines for Responses:
-- **Thoroughness**: Write long-form answers, providing in-depth explanations to all inquiries.  
-- **Format**: Ensure use **markdown** to structure your response effectively (headings, lists, quotes, tables). 
-- **Context-Dependent**: Only use information available from the current chat history or provided context. If the information is not available, kindly state that you don’t have enough resources to answer the query.
-- **Language Consistency**: Generate responses in the same language as the input.
-- **Greeting Responses**: If the user greets you or asks general questions like “Who are you?” or “Hello,” respond naturally, without referring to limitations.
+---
 
-### Specific Instructions:
+## **Response Logic**
+- **If both retrieved context and chat history exist**, **combine them** to generate the most complete and accurate response.
+- **If only retrieved context exists**, use it.
+- **If only chat history exists**, **use it** and provide an answer.  
+  - **You must always generate a response based on chat history if it is available.**
+- **If neither retrieved context nor chat history exists**, return:  
+  *"I cannot generate an answer because there is not enough context."*
+
+---
+
+## **Specific Instructions**
 - **Answer Structure**: Begin by addressing the user’s query directly, then break down your response into relevant sub-sections or points if needed.  
-- **Clarity**: Avoid unnecessary jargon or complexity; ensure readability for a wide audience, while maintaining professional accuracy.
+- **Clarity**: Avoid unnecessary jargon or complexity; ensure readability for a wide audience, while maintaining professional accuracy.  
 
-### Data Comparison:
-- If the question **involves a comparison between two data**,explicitly points out differences, or asks to highlight variations, generate a **simple table** in markdown format.  
-- The table should include the **key metrics of both data** to allow for a structured analysis.
+### **Data Comparison**
+- If the question **involves a comparison between two data points**, explicitly highlight differences, variations, or insights.
+- Present the key metrics in a **structured markdown table**.
 - After the table, provide **a concise summary analyzing the key differences and insights**.
 
-#### Example Table Format:
+#### **Example Table Format**
 | Metric           | Dataset 1 Value | Dataset 2 Value | Difference/Insight |
 |-----------------|---------------|---------------|----------------|
 | Revenue (THB)  | X             | Y             | Higher revenue in Dataset 1 |
 | Net Profit     | A             | B             | Dataset 2 has better profitability |
+
+---
+  
+### Guidelines for Responses:
+- **Thoroughness**: Write long-form answers, providing in-depth explanations to all inquiries.  
+- **Format**: Ensure use **markdown** to structure your response effectively (headings, lists, quotes, tables). 
+- **Language Consistency**: Generate responses in the same language as the input.
+- **Greeting Responses**: If the user greets you or asks general questions like “Who are you?” or “Hello,” respond naturally, without referring to limitations.
+  
+---
+
+## **Handling Missing Context**
+- **If both retrieved context and chat history exist**, combine them for the response.
+- **If only retrieved context exists**, use it.
+- **If only chat history exists**, **always generate a response** based on the available history.
+- **If neither retrieved context nor chat history is available**, return:  
+  *"I cannot generate an answer because there is not enough context."*
 """
+
+
 llm_generate = ChatOpenAI(streaming=True, model_name=os.getenv("OPEN_AI_MODEL_MAIN"), temperature=0 ,api_key=os.getenv("OPEN_AI_API_KEY"))
 
 prompt = ChatPromptTemplate.from_messages(
     [
         ("system", prompt),
         MessagesPlaceholder(variable_name="chat_history"),
-        # ("human", "Question: \n\n{question} \n\n Context: \n\n{context}"),
         ("Context: Context\n\n{context}"),
         ("human", "Question: \n\n{question}")
     ]
@@ -161,7 +231,6 @@ hallucination_prompt = ChatPromptTemplate.from_messages(
 )
 
 hallucination_grader = hallucination_prompt | structured_llm_grader
-# print(hallucination_grader.invoke({"documents": docs, "generation": generation}))
 
 
 
@@ -194,7 +263,6 @@ answer_prompt = ChatPromptTemplate.from_messages(
 )
 
 answer_grader = answer_prompt | structured_llm_grader
-# answer_grader.invoke({"question": question, "generation": generation})
 
 
 
@@ -229,7 +297,6 @@ re_write_prompt = ChatPromptTemplate.from_messages(
 
 
 question_rewriter = re_write_prompt | llm | StrOutputParser()
-# question_rewriter.invoke({"question": question})
 
 
 
@@ -238,19 +305,12 @@ question_rewriter = re_write_prompt | llm | StrOutputParser()
 
 
 ### Nodes
-from stella.services.question_classifier import classifier
 sys.path.append(os.path.dirname(os.path.abspath(__name__)))
-from db.services.service import GetAllCompanies, findCompanies
+sys.path.append(os.path.dirname(os.path.abspath(__name__)) + "/stella/services")
 
-def createTable(data:dict):
-    table = []
-    table.append("| Stock Name or Abbreviation | Company Name in Thai                     | Company Name in English           |")
-    table.append("    |----------------------------|------------------------------------------|-----------------------------------|")
+from stella.services.question_classifier import classifier, createDocTable, createTable
+from db.services.service import GetAllCompanies, findCompanies, getALLDocument
 
-    for stock, thai_name, english_name in data:
-        table.append(f"    | {stock:<26} | {thai_name:<45} | {english_name:<33} |")
-
-    return "\n".join(table) + "\n    ----"
 
 
 def question_class(state):
@@ -261,7 +321,7 @@ def question_class(state):
     counter = 0
 
     pipe = classifier()
-    result = pipe.invoke({"input": question, "table": createTable(GetAllCompanies())})
+    result = pipe.invoke({"input": question, "table": createTable(GetAllCompanies()), "general_file": createDocTable(getALLDocument())})
     if result.binary_score == "yes":
         print("Classify: Extract")
         # return {"question": question, "decide": "extract"}
@@ -302,10 +362,8 @@ def retrieve_and_gradeDco(state):
             else:
                 print("Document Not Relevant")
                 continue
-    # documents = core.stlRetreiver(question)
 
     print("CONTEXT:", relevant_docs)
-    # return {"documents": documents, "question": question}
     return {"documents": relevant_docs, "question": question, "counter": counter}
 
 # def grade_documents(state):
@@ -356,7 +414,6 @@ def generate(state):
     documents = state["documents"]
     session_id = state["session_id"]
     input_question = state["input_question"]
-    # counter = state["counter"]
 
     if not findSession(session_id=session_id):
         session_id = createGuestSession()
@@ -388,20 +445,12 @@ def generate(state):
         return {"documents": documents, "question": question, "generation": generation, "session": session_id}
 
 
-    # counter_halu += 1
-    # return {"documents": documents, "question": question, "generation": generation, "session": session_id, "counter_halu": counter_halu}
-
-    # return {"documents": documents, "question": question, "generation": generation, "session": session_id, "counter": counter}
-
-
 def transform_query(state):
     print("Transform Query")
     question = state["question"]
     documents = state["documents"]
     counter = state["counter"]
     counter += 1
-    # if not documents:
-    #     return {"documents": [], "question": question, "counter": counter}
 
     # Re-write question
     better_question = question_rewriter.invoke({"question": question})
@@ -534,7 +583,7 @@ def esgReportTask(raw:str, file:str, partition_name:str):
 def etcTask(raw:str, file:str, partition_name:str, start_page:int=1):
     chunks = None
     try:
-        chunks = globalFileChunking(content=raw, file_name=file, start_page=start_page, verbose=True)
+        chunks = globalFileChunking(content=raw, file_name=file, start_page=start_page, verbose=False)
         if chunks == "Faliure":
             raise ChunkingError("Chunking Error")
     except:
@@ -550,7 +599,7 @@ def etcTask(raw:str, file:str, partition_name:str, start_page:int=1):
 def generalTask(raw:str, file:str, partition_name:str, description:str, start_page:int=1):
     chunks = None
     try:
-        chunks = globalFileChunking(content=raw, file_name=file, start_page=start_page, verbose=True)
+        chunks = globalFileChunking(content=raw, file_name=file, start_page=start_page, verbose=False)
         if chunks == "Faliure":
             raise ChunkingError("Chunking Error")
     except:
