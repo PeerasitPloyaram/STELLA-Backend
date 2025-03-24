@@ -130,14 +130,35 @@ def saveHistory(session_uuid, message, role):
     connection.commit()
     connection.close()
 
-def getHistory(session_uuid):
-    sql = f'SELECT messages.message, messages.role, created_at FROM messages WHERE messages.chat_session_uuid = "{session_uuid}";'
+def getHistory(session_uuid:str, limiter:int=8):
+    sql = f"""
+    WITH human_messages AS (
+        SELECT message, role, created_at, ROW_NUMBER() OVER (ORDER BY created_at DESC) AS rn
+        FROM messages
+        WHERE chat_session_uuid = "{session_uuid}" AND role = 'human'
+        LIMIT {limiter}
+    ),
+    system_messages AS (
+        SELECT message, role, created_at, ROW_NUMBER() OVER (ORDER BY created_at DESC) AS rn
+        FROM messages
+        WHERE chat_session_uuid = "{session_uuid}" AND role = 'system'
+        LIMIT {limiter}
+    )
+    SELECT message, role, created_at 
+    FROM (
+        SELECT message, role, created_at, rn * 2 AS sort_order FROM human_messages
+        UNION ALL
+        SELECT message, role, created_at, rn * 2 + 1 AS sort_order FROM system_messages
+    ) AS combined
+    ORDER BY created_at ASC;
+    """
 
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(statement=sql)
     respone = cursor.fetchall()
     session_messages = []
+
     for message, role, date in respone:
         if role == "human":
             session_messages.append(HumanMessage(content=message))
@@ -239,6 +260,7 @@ def dropUserSession(user_id:str, session_id:str):
         connection.close()
 
 if __name__ == "__main__":
+    print(getHistory("e2eec98f-78cd-4d98-aeec-867a7a48ea10"))
     # print(connection)
     # print(getFirstMessageHistory("2ce0f745-a2f0-412f-aecd-3755f786559b"))
     # print(createUserSession("2"))
