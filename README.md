@@ -2,7 +2,7 @@
 ##### STELLA stands for [LLM for S.E.T]
 It is a web application that allows users and guests to ask questions and receive answers from files stored in the system, such as One Reports (56-1), ESG Reports, or other related documents.
 
-###### This project is my Senior Project (014184999) in Computer Science at Kasetsart University.
+###### This project is my Senior Project (01418499) in Computer Science at Kasetsart University.
 
 ### Member
 - ##### นาย พีรสิษฐ์ พลอยอร่าม 6410451237
@@ -61,7 +61,7 @@ python install -r requirements.text
 
 <br>
 
-4. Rename ```.env_example``` to ```.env``` and add the required data inside .env (this must be done before running Docker Compose).
+4. Rename ```.env_example``` to ```.env``` and add the required data inside .env (This must be done before running Docker Compose)
 
 
 <br>
