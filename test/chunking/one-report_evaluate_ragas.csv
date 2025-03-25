@@ -1,0 +1,13 @@
+chunk_size,context_precision,context_recall
+RecursiveCharacterText_chunksize800_chunkoverlap100,0.6346,0.7762
+RecursiveCharacterText_chunksize800_chunkoverlap500,0.7239,0.7255
+RecursiveCharacterText_chunksize1000_chunkoverlap100,0.5936,0.7349
+RecursiveCharacterText_chunksize1000_chunkoverlap500,0.6904,0.7306
+RecursiveCharacterText_chunksize1200_chunkoverlap100,0.7029,0.7199
+RecursiveCharacterText_chunksize1200_chunkoverlap500,0.7122,0.7801
+RecursiveCharacterText_chunksize1400_chunkoverlap100,0.6822,0.7168
+RecursiveCharacterText_chunksize1400_chunkoverlap500,0.6899,0.7415
+RecursiveCharacterText_chunksize1600_chunkoverlap100,0.6722,0.7379
+RecursiveCharacterText_chunksize1600_chunkoverlap500,0.6931,0.6875
+semantic_percentile,0.5935,0.7537
+hybrid_chunking,0.7018, 0.8465

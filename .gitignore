@@ -219,3 +219,12 @@ pyrightconfig.json
 [Ss]cripts
 pyvenv.cfg
 pip-selfcheck.json
+
+# Docker Data
+/milvus/mariadb
+/milvus/schema
+/milvus/volumes
+
+# /db/init.py
+
+/chunking/pdfs/**
