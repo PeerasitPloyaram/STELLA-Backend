@@ -30,8 +30,8 @@ This repository is a backend of STELLA for API Server And SELF RAG System
 <br>
 
 ### Caution
-- ##### This backend is using a large amount of CPU and Memory to run the server. Please stop other processes or programs before run this.
-- ##### After the server starts for the first time, retrieving data takes more time to load the collection into memory.
+- ##### This backend consumes a large amount of CPU and memory to run the server. Please stop other processes or programs before running it.
+- ##### When starting the server for the first time, retrieving data may take longer as the collection is loaded into memory.
 
 <br>
 
@@ -61,12 +61,12 @@ python install -r requirements.text
 
 <br>
 
-4. Change name from .env_example to ".env" and Add Data inside .env (must be done before running Docker-Compose).
+4. Rename ```.env_example``` to ```.env``` and add the required data inside .env (this must be done before running Docker Compose).
 
 
 <br>
 
-5. Install and Run Docker-Compse
+5. Install and Run Docker-Compose
 ```
 # Change Path to Directory Milvus
 cd milvus
@@ -79,10 +79,7 @@ docker-compose --env-file ../.env up -d
 
 6. Init Vector Db and Schema (Only in First time)
 ```
-# Change Path to milvus
-cd milvus/
-
-# Run Script for init Vector Database and Set Config
+# Run the script to initialize the vector database and set the configuration.
 python core.py
 ```
 
@@ -106,9 +103,12 @@ Create Schma Successfuly.
 7. Start Backend Server
 ```
 # Change Path Back to Main
+cd ..
+
+# Start
 fastapi dev main/main.py
 
-# After run this code it will use 1 - 2 minetues for start server
+# After running this code, it will take 1–2 minutes to start the server.
 ```
 
 <br>
