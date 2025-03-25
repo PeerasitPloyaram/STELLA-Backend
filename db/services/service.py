@@ -27,7 +27,8 @@ def get_connection():
         database=os.getenv("DB_DATABASE_NAME")
     )
 
-client = MilvusClient(db_name=os.getenv("MILVUS_DATABASE_NAME"))
+def getMilvusConnection():
+    return MilvusClient(db_name=os.getenv("MILVUS_DATABASE_NAME"))
 
 
 # Create New Location Storage of Collection name and Partition name
@@ -435,6 +436,7 @@ def createNewCompany(abbr:str, name_th:str, name_en:str, sector_id:str):
     limit_size = 5
     nodes = findCollectionCNode()
     pointer = None
+    client = getMilvusConnection()
 
 
     for node in nodes:
