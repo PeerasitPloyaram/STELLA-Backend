@@ -77,7 +77,33 @@ docker-compose --env-file ../.env up -d
 
 <br>
 
-6. Start Backend Server
+6. Init Vector Db and Schema (Only in First time)
+```
+# Change Path to milvus
+cd milvus/
+
+# Run Script for init Vector Database and Set Config
+python core.py
+```
+
+The output should be like this:
+```
+[CORE] Initializing Milvus Database Core...
+[DB] init Embedding Model...
+[DB] init Embedding Model Successfully.
+[DB] Found Database: global_evaluate
+[DB] Create Collection "cnode_1"
+[DB] Collection "cnode_1" Is Ready.
+[DB] Create Collection "gnode_1"
+[DB] Collection "gnode_1" Is Ready.
+[DB] Create Collection "frontend_query_gnode"
+[DB] Collection "frontend_query_gnode" Is Ready.
+Create Schma Successfuly.
+```
+
+<br>
+
+7. Start Backend Server
 ```
 # Change Path Back to Main
 fastapi dev main/main.py
