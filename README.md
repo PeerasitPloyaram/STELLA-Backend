@@ -45,7 +45,11 @@ python -m venv venv
 
 2. Activate Environment
 ```
+# MacOS and Linux
 ./venv/bin/activate
+
+# Window
+./venv/Scripts/activate
 ```
 
 <br>
