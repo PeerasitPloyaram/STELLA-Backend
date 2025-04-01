@@ -95,7 +95,7 @@ The output should be like this:
 [DB] Collection "gnode_1" Is Ready.
 [DB] Create Collection "frontend_query_gnode"
 [DB] Collection "frontend_query_gnode" Is Ready.
-Create Schma Successfuly.
+Create Schema Successfully.
 ```
 
 <br>
