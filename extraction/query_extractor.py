@@ -67,60 +67,84 @@ def query_extractorV1(user_input:str):
 
 
 def query_extractorV2(user_query:str):
-    system = """
-    You are classifying user questions to determine which companies listed on the SET-listed companies are mentioned and the specific years referenced.
+    # system = """
+    # You are classifying user questions to determine which companies listed on the SET-listed companies are mentioned and the specific years referenced.
+    # The questions may be in Thai or English.
+
+    # ### SET-listed companies
+    # {table}
+
+    # Instructions:
+
+    # Extract ALL company stock name or abbreviations from the user's question that match the SET-listed companies
+    # Each matching company should be processed separately and included in output
+    # Matching should be case-insensitive (e.g., "SCB", "scb", "Scb", "'true'" all match)
+    # Match only the exact stock abbreviation (not the full company names)
+    # For EACH matched company from the SET list:
+
+    # If no specific year is mentioned, assign 2023
+    # If explicit years are mentioned, use those years
+
+
+    # Output a separate line for EACH matched company in format: stockname:year1,year2,...
+    # Only output [] if NO companies from the SET list are found
+
+    # Rules:
+
+    # Check EVERY potential company mention against the SET list
+    # Include ALL companies that match the SET list in the output
+    # Ignore companies not in the SET list but still output the valid ones
+    # All stock names in lowercase in output
+    # Each valid company gets its own line of output
+    # Use 2023 as default year for all valid companies when no year specified
+    # Output must not empty but it can be only [stockname:year1,year2,...] or []
+
+    # Format:
+    # Input: [user question]
+    # Output:
+    # [stockname:year1,year2,...]
+    # [stockname:year1,year2,...]
+    # or
+    # []
+
+    # Examples:
+    # Input: "How are SCB and TRUE's incomes different in 2023?"
+    # Output:
+    # scb:2023
+    # true:2023
+
+    # Input: "Total income of SCB in 2021 - 2023 compared to the latest TRUE?"
+    # Output:
+    # scb:2021,2022,2023
+    # true:2023
+
+    # Input: "What about AOT's performance in 2022?"
+    # Output:
+    # []
+    # """
+
+    # Main Extract Company Question V2
+    system ="""
+    You are classifying user questions to identify which companies listed on the SET (Stock Exchange of Thailand) are mentioned and the specific years referenced.  
     The questions may be in Thai or English.
 
-    ### SET-listed companies
+    ### **SET-listed Companies**
     {table}
 
-    Instructions:
+    ### **Instructions:**
+    1. **Extract all stock abbreviations** from the user's question that match the SET-listed companies.  
+        - **Ensure detection even if the abbreviation is part of a longer phrase.**
+        - **Step 1: Tokenize the question** (convert to lowercase, split by spaces/punctuation).
+        - **Step 2: Match stock abbreviations** (check if any token exactly matches a stock abbreviation, e.g., `"lh"`, `"mint"`).
+        - **Step 3: Match company names** (allow partial matches in Thai/English).
+        - **Step 4: Extract explicit years** (if none are found, default to `2023`).
 
-    Extract ALL company stock name or abbreviations from the user's question that match the SET-listed companies
-    Each matching company should be processed separately and included in output
-    Matching should be case-insensitive (e.g., "SCB", "scb", "Scb", "'true'" all match)
-    Match only the exact stock abbreviation (not the full company names)
-    For EACH matched company from the SET list:
-
-    If no specific year is mentioned, assign 2023
-    If explicit years are mentioned, use those years
-
-
-    Output a separate line for EACH matched company in format: stockname:year1,year2,...
-    Only output [] if NO companies from the SET list are found
-
-    Rules:
-
-    Check EVERY potential company mention against the SET list
-    Include ALL companies that match the SET list in the output
-    Ignore companies not in the SET list but still output the valid ones
-    All stock names in lowercase in output
-    Each valid company gets its own line of output
-    Use 2023 as default year for all valid companies when no year specified
-    Output must not empty but it can be only [stockname:year1,year2,...] or []
-
-    Format:
-    Input: [user question]
-    Output:
-    [stockname:year1,year2,...]
-    [stockname:year1,year2,...]
-    or
-    []
-
-    Examples:
-    Input: "How are SCB and TRUE's incomes different in 2023?"
-    Output:
-    scb:2023
-    true:2023
-
-    Input: "Total income of SCB in 2021 - 2023 compared to the latest TRUE?"
-    Output:
-    scb:2021,2022,2023
-    true:2023
-
-    Input: "What about AOT's performance in 2022?"
-    Output:
-    []
+    2. **Output Format:**
+        - Each valid stock abbreviation should be listed on a **separate line** in the format:  
+            ```
+            stockname:year1,year2,...
+            ```
+        - If no valid companies are found, return **`[]`**.
     """
 
     table = createTable(GetAllCompanies())
@@ -133,6 +157,7 @@ def query_extractorV2(user_query:str):
     # print(system.format(table=table))
     subquery_decomposer_chain = subquery_decomposition_prompt | ChatOpenAI(model="gpt-4o", api_key=os.getenv("OPEN_AI_API_KEY"))
 
+    # print(table)
     response = subquery_decomposer_chain.invoke({"user_query": user_query, "table": table}).content
 
     # print(response)
@@ -155,13 +180,13 @@ def query_extractorV2(user_query:str):
                 name: year
             })
             
-    print("LLM Decision", buffer)
+    print("Decision", buffer)
 
     output = []
     for i in buffer:
         if findCompanies([list(i.keys())[0]]):
             output.append(i) 
-    print("LLM Search", output)
+    print("Searching", output)
     return output
     
 
@@ -223,6 +248,6 @@ if __name__ == "__main__":
     # print(decompose_query("aav กับสิ่งแวดล้อมที่เกี่ยวข้องกับ policy มั้ยเปรียบเทียบกับ true"))
     # print(createTable(GetAllCompanies()))
     # print(query_extractorV1("bts"))
-    # print(query_extractorV2("true มีการจัดการสิ่งแวดล้อมยังไงบ้าง และแตกต่างกับ aot มั้ย"))
+    # print(query_extractorV2("siam global house คือ"))
     # print(createTable(GetAllCompanies()))
     # print(query_extractorV3("bts"))

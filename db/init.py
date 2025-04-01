@@ -103,7 +103,7 @@ def initCorpusSchemaCollections():
     cursor.execute(sql_company_file)
 
     connection.commit()
-    print("Create Schma Successfuly.")
+    print("Create Schema Successfully.")
  
 def initUserSchemaCollection():
     role = """
