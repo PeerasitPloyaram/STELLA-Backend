@@ -4,8 +4,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
-from pprint import pprint
-import os,sys
+import os, sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -395,7 +394,7 @@ def decide_to_generate(state):
     state["question"]
     filtered_documents = state["documents"]
     counter = state["counter"]
-    print("Count:", counter)
+
     if int(counter) >= 1:
         print("Decide: Generate")
         return "generate"
@@ -419,10 +418,9 @@ def generate(state):
         session_id = createGuestSession()
 
     chat_history = getHistory(session_id)
-    print(chat_history)
 
     generation = rag_chain.invoke({"context": documents, "question": question, "chat_history": chat_history})
-    print(generation)
+    # print(generation)
 
 
     print("Check Hallucination")

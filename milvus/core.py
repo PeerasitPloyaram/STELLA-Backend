@@ -442,7 +442,7 @@ class Core:
         return chunks
         """
 
-        corpus:str = self.searchCorpus(query=user_query_input)
+        corpus:str = self.searchCorpus(query=user_query_input, ratio=0.75)
         companies:str = query_extractorV2(user_query=user_query_input)
 
         name_buffer:list[str] = []
@@ -496,7 +496,7 @@ class Core:
                     "k": 4,
                     "partition_names": i["partition"],
                 }
-            print(config)
+            # print(config)
             
             init_vector = self.initVectorStore(collection_name=i["collection"], partition_names=i["partition"])
             retriever = init_vector.as_retriever(search_kwargs=config)
@@ -587,7 +587,7 @@ if __name__ == "__main__":
 
     load_dotenv()
     core = Core(
-                database_name="new_core",
+                database_name=os.getenv("MILVUS_DATABASE_NAME"),
                 schema=DATA_SOURCE_SCHEMA,
                 dense_embedding_model=HuggingFaceEmbeddings(model_name=os.getenv("DENSE_EMBEDDING_MODEL")),
                 create_first_node=False,

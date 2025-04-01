@@ -1,4 +1,2 @@
 context_precision,context_recall,faithfulness,answer_relevancy
-0.8761,0.8941,0.9186,0.8731
-
-
+0.9087, 0.9667, 0.8588,0.8256
